@@ -1,5 +1,6 @@
 /*
  * usb_cdc_str_desc.c
+ * Avoid wide-string error (Unicode)
  *
  *  Created on: 26 нояб. 2020 г.
  *      Author: kochetkov

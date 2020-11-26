@@ -168,17 +168,146 @@ static struct usb_cdc_line_coding cdc_line = {
     .bDataBits          = 8,
 };
 
-void cdc_init_usbd(void);
-static usbd_respond cdc_getdesc (usbd_ctlreq *req, void **address, uint16_t *length);
-static usbd_respond cdc_control(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_callback *callback);
-static void cdc_rxonly (usbd_device *dev, uint8_t event, uint8_t ep);
-static void cdc_txonly(usbd_device *dev, uint8_t event, uint8_t ep);
-static void cdc_rxtx(usbd_device *dev, uint8_t event, uint8_t ep);
-static void cdc_loopback(usbd_device *dev, uint8_t event, uint8_t ep);
-static usbd_respond cdc_setconf (usbd_device *dev, uint8_t cfg);
-
 } // extern "C"
 
+extern usbd_device usb_udev;
+extern uint32_t	usb_ubuf[0x20];
+constexpr uint32_t USB_FIFO_SIZE = 0x200;
 
+class usb_cdc_c {
+	static uint8_t     fifo[USB_FIFO_SIZE]; // in/out fifo
+	static uint32_t    fpos;	 			// fifo current capacity
+public:
+	static void Init() noexcept {
+		usbd_init(&usb_udev, &usbd_hw, CDC_EP0_SIZE, usb_ubuf, sizeof(usb_ubuf));
+		usbd_reg_config(&usb_udev,  usb_cdc_c::SetConfig);
+		usbd_reg_control(&usb_udev, usb_cdc_c::ContorlHandler);
+		usbd_reg_descr(&usb_udev,   usb_cdc_c::GetDescriptor);
+
+		NVIC_EnableIRQ(USB_IRQn);
+		usbd_enable(&usb_udev, true);
+		usbd_connect(&usb_udev, true);
+
+		fpos = 0;
+		for (uint32_t i = 0; i < USB_FIFO_SIZE; i++) {
+		    fifo[i] = 0;
+		}
+	}
+
+	static usbd_respond SetConfig(usbd_device *dev, uint8_t cfg) noexcept {
+		switch (cfg) {
+		case 0:
+			/* deconfiguring device */
+			usbd_ep_deconfig(dev, CDC_NTF_EP);
+			usbd_ep_deconfig(dev, CDC_TXD_EP);
+			usbd_ep_deconfig(dev, CDC_RXD_EP);
+			usbd_reg_endpoint(dev, CDC_RXD_EP, 0);
+			usbd_reg_endpoint(dev, CDC_TXD_EP, 0);
+			return usbd_ack;
+		case 1:
+			/* configuring device */
+			usbd_ep_config(dev, CDC_RXD_EP, USB_EPTYPE_BULK /*| USB_EPTYPE_DBLBUF*/, CDC_DATA_SZ);
+			usbd_ep_config(dev, CDC_TXD_EP, USB_EPTYPE_BULK /*| USB_EPTYPE_DBLBUF*/, CDC_DATA_SZ);
+			usbd_ep_config(dev, CDC_NTF_EP, USB_EPTYPE_INTERRUPT, CDC_NTF_SZ);
+
+#if ((CDC_TXD_EP & 0x7F) == (CDC_RXD_EP & 0x7F))
+			usbd_reg_endpoint(dev, CDC_RXD_EP, usb_cdc_c::HandleData);
+			usbd_reg_endpoint(dev, CDC_TXD_EP, usb_cdc_c::HandleData);
+#else
+	#error "Bi-directional endpoint handlers not implemented!"
+#endif
+
+			usbd_ep_write(dev, CDC_TXD_EP, 0, 0);
+			return usbd_ack;
+		default:
+			return usbd_fail;
+		}
+	}
+
+	static usbd_respond GetDescriptor(usbd_ctlreq *req, void **address, uint16_t *length) noexcept {
+		const uint8_t dtype = req->wValue >> 8;
+		const uint8_t dnumber = req->wValue & 0xFF;
+		const void* desc;
+		uint16_t len = 0;
+		switch (dtype) {
+		case USB_DTYPE_DEVICE:
+			desc = &device_desc;
+			break;
+		case USB_DTYPE_CONFIGURATION:
+			desc = &config_desc;
+			len = sizeof(config_desc);
+			break;
+		case USB_DTYPE_STRING:
+			if (dnumber < 3) {
+				desc = string_desc_table[dnumber];
+			} else {
+				return usbd_fail;
+			}
+			break;
+		default:
+			return usbd_fail;
+		}
+		if (len == 0) {
+			len = ((struct usb_header_descriptor*)desc)->bLength;
+		}
+		*address = (void*)desc;
+		*length = len;
+		return usbd_ack;
+	}
+
+	static usbd_respond ContorlHandler(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_callback *callback) noexcept {
+		if (((USB_REQ_RECIPIENT | USB_REQ_TYPE) & req->bmRequestType) == (USB_REQ_INTERFACE | USB_REQ_CLASS)
+			  && req->wIndex == 0)
+		{
+			switch (req->bRequest) {
+			case USB_CDC_SET_CONTROL_LINE_STATE:
+				return usbd_ack;
+			case USB_CDC_SET_LINE_CODING:
+				memcpy( req->data, &cdc_line, sizeof(cdc_line));
+				return usbd_ack;
+			case USB_CDC_GET_LINE_CODING:
+				dev->status.data_ptr = &cdc_line;
+				dev->status.data_count = sizeof(cdc_line);
+				return usbd_ack;
+			default:
+				return usbd_fail;
+			}
+		}
+		return usbd_fail;
+	}
+
+	static void inline HandleData(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+	    if (event == usbd_evt_eptx) {
+	    	HandleWrite(dev, event, ep);
+	    } else {
+	    	HandleRead(dev, event, ep);
+	    }
+	}
+
+	/**
+	 * Write new data to IN EP
+	 * @param dev   - UDEV structure
+	 * @param event - polled USB event
+	 * @param ep    - triggered EP
+	 */
+    static void HandleWrite(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+        uint8_t _t = dev->driver->frame_no();
+        memset(fifo, _t, CDC_DATA_SZ);
+        usbd_ep_write(dev, ep, fifo, CDC_DATA_SZ);
+    }
+
+    /**
+     * Read new data from OUT EP
+	 * @param dev   - UDEV structure
+	 * @param event - polled USB event
+	 * @param ep    - triggered EP
+     */
+    static void HandleRead (usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+       usbd_ep_read(dev, ep, fifo, CDC_DATA_SZ);
+    }
+    //TODO: read/write fifo logic, finish ll driver
+};
+
+typedef usb_cdc_c usb;
 
 #endif /* __INCLUDE_USB_CDC_HPP_ */

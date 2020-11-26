@@ -14,12 +14,10 @@ int main() {
 	gpio::Init();
 
 	led::Init();
+	usb::Init();
 
-	cdc_init_usbd();
-	usbd_enable(&usb_udev, true);
-	usbd_connect(&usb_udev, true);
 	while(1) {
-		usbd_poll(&usb_udev);
+
 	}
 }
 
