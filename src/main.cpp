@@ -3,9 +3,9 @@
 #include "rcc.hpp"
 #include "gpio.hpp"
 #include "led.hpp"
-#include "usb_cdc_ll.hpp"
+#include "cdc.hpp"
 
-extern usbd_device usb_udev;
+//extern usbd_device usb_udev;
 
 int main() {
 

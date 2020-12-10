@@ -17,17 +17,21 @@ extern "C" {
 #include "usb_cdc.h"
 }
 
-#define CDC_EP0_SIZE    0x08 // EP #0
-#define CDC_RXD_EP      0x01 // EP #1 OUT
-#define CDC_TXD_EP      0x81 // EP #1 IN
-#define CDC_DATA_SZ     0x40 // 64 byte
-#define CDC_NTF_EP      0x82 // EP #2 IN
-#define CDC_NTF_SZ      0x08 // 8 byte
+#define CDC_EP0_SIZE    0x08
+#define CDC_RXD_EP      0x01
+#define CDC_TXD_EP      0x81
+#define CDC_DATA_SZ     0x40
+#define CDC_NTF_EP      0x82
+#define CDC_NTF_SZ      0x08
 
-#define CDC_DTE_RATE    115200
-#define CDC_PROTOCOL    USB_PROTO_NONE // or USB_CDC_PROTO_V25TER (modem)
+#define CDC_PROTOCOL USB_PROTO_NONE // USB_CDC_PROTO_V25TER
 
 extern "C" {
+
+extern usbd_device usb_udev;
+extern uint32_t	usb_ubuf[0x20];
+
+extern const struct usb_string_descriptor *const dtable[];
 
 /* Declaration of the report descriptor */
 struct cdc_config {
@@ -53,8 +57,8 @@ static const struct usb_device_descriptor device_desc = {
     .bDeviceSubClass    = USB_SUBCLASS_IAD,
     .bDeviceProtocol    = USB_PROTO_IAD,
     .bMaxPacketSize0    = CDC_EP0_SIZE,
-    .idVendor           = 0x0483, // STM
-    .idProduct          = 0x5740, // VCP
+    .idVendor           = 0x0483,
+    .idProduct          = 0x5740,
     .bcdDevice          = VERSION_BCD(1,0,0),
     .iManufacturer      = 1,
     .iProduct           = 2,
@@ -71,8 +75,8 @@ static const struct cdc_config config_desc = {
         .bNumInterfaces         = 2,
         .bConfigurationValue    = 1,
         .iConfiguration         = NO_DESCRIPTOR,
-        .bmAttributes           = USB_CFG_ATTR_RESERVED | USB_CFG_ATTR_SELFPOWERED, // self-powered
-        .bMaxPower              = USB_CFG_POWER_MA(100), 							// 100 mA MAX
+        .bmAttributes           = USB_CFG_ATTR_RESERVED | USB_CFG_ATTR_SELFPOWERED,
+        .bMaxPower              = USB_CFG_POWER_MA(100),
     },
     .comm_iad = {
         .bLength = sizeof(struct usb_iad_descriptor),
@@ -128,7 +132,7 @@ static const struct cdc_config config_desc = {
         .bEndpointAddress       = CDC_NTF_EP,
         .bmAttributes           = USB_EPTYPE_INTERRUPT,
         .wMaxPacketSize         = CDC_NTF_SZ,
-        .bInterval              = 0xFF, // 255 frames for NOTIF
+        .bInterval              = 0xFF,
     },
     .data = {
         .bLength                = sizeof(struct usb_interface_descriptor),
@@ -147,7 +151,7 @@ static const struct cdc_config config_desc = {
         .bEndpointAddress       = CDC_RXD_EP,
         .bmAttributes           = USB_EPTYPE_BULK,
         .wMaxPacketSize         = CDC_DATA_SZ,
-        .bInterval              = 0x01, // 1 frame for DATA BULK OUT
+        .bInterval              = 0x01,
     },
     .data_eptx = {
         .bLength                = sizeof(struct usb_endpoint_descriptor),
@@ -155,42 +159,29 @@ static const struct cdc_config config_desc = {
         .bEndpointAddress       = CDC_TXD_EP,
         .bmAttributes           = USB_EPTYPE_BULK,
         .wMaxPacketSize         = CDC_DATA_SZ,
-        .bInterval              = 0x01, // 1 frame for DATA BULK IN
+        .bInterval              = 0x01,
     },
 };
 
-extern const struct usb_string_descriptor *const string_desc_table[];
-
 static struct usb_cdc_line_coding cdc_line = {
-    .dwDTERate          = CDC_DTE_RATE,
+    .dwDTERate          = 115200,
     .bCharFormat        = USB_CDC_1_STOP_BITS,
     .bParityType        = USB_CDC_NO_PARITY,
     .bDataBits          = 8,
 };
-
 } // extern "C"
 
-extern usbd_device usb_udev;
-extern uint32_t	usb_ubuf[0x20];
-constexpr uint32_t USB_FIFO_SIZE = 0x200;
+constexpr uint32_t USB_BUF_SIZE = 512; // CDC_DATA_SZ
 
 class usb_cdc_c {
-	static uint8_t     fifo[USB_FIFO_SIZE]; // in/out fifo
-	static uint32_t    fpos;	 			// fifo current capacity
-public:
-	static void Init() noexcept {
-		usbd_init(&usb_udev, &usbd_hw, CDC_EP0_SIZE, usb_ubuf, sizeof(usb_ubuf));
-		usbd_reg_config(&usb_udev,  usb_cdc_c::SetConfig);
-		usbd_reg_control(&usb_udev, usb_cdc_c::ContorlHandler);
-		usbd_reg_descr(&usb_udev,   usb_cdc_c::GetDescriptor);
+	static uint8_t    txbuf[USB_BUF_SIZE];
+	static int32_t    txpos;
+	static uint8_t    rxbuf[USB_BUF_SIZE];
+	static int32_t    rxpos;
 
-		NVIC_EnableIRQ(USB_IRQn);
-		usbd_enable(&usb_udev, true);
-		usbd_connect(&usb_udev, true);
-
-		fpos = 0;
-		for (uint32_t i = 0; i < USB_FIFO_SIZE; i++) {
-		    fifo[i] = 0;
+	static inline void flushBuffer(uint8_t * buf, uint32_t len) {
+		for (uint32_t i = 0; i < len; i++) {
+			buf[i] = 0;
 		}
 	}
 
@@ -214,7 +205,7 @@ public:
 			usbd_reg_endpoint(dev, CDC_RXD_EP, usb_cdc_c::HandleData);
 			usbd_reg_endpoint(dev, CDC_TXD_EP, usb_cdc_c::HandleData);
 #else
-	#error "Bi-directional endpoint handlers not implemented!"
+#error "Bi-directional endpoint handlers not implemented!"
 #endif
 
 			usbd_ep_write(dev, CDC_TXD_EP, 0, 0);
@@ -239,7 +230,7 @@ public:
 			break;
 		case USB_DTYPE_STRING:
 			if (dnumber < 3) {
-				desc = string_desc_table[dnumber];
+				desc = dtable[dnumber];
 			} else {
 				return usbd_fail;
 			}
@@ -257,7 +248,7 @@ public:
 
 	static usbd_respond ContorlHandler(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_callback *callback) noexcept {
 		if (((USB_REQ_RECIPIENT | USB_REQ_TYPE) & req->bmRequestType) == (USB_REQ_INTERFACE | USB_REQ_CLASS)
-			  && req->wIndex == 0)
+				&& req->wIndex == 0)
 		{
 			switch (req->bRequest) {
 			case USB_CDC_SET_CONTROL_LINE_STATE:
@@ -277,37 +268,90 @@ public:
 	}
 
 	static void inline HandleData(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
-	    if (event == usbd_evt_eptx) {
-	    	HandleWrite(dev, event, ep);
-	    } else {
-	    	HandleRead(dev, event, ep);
-	    }
+		if (event == usbd_evt_eptx) {
+			HandleWrite(dev, event, ep);
+		} else {
+			HandleRead(dev, event, ep);
+		}
 	}
 
 	/**
-	 * Write new data to IN EP
+	 * Write new data to IN EP (if txbuf not empty)
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
 	 * @param ep    - triggered EP
 	 */
-    static void HandleWrite(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
-        uint8_t _t = dev->driver->frame_no();
-        memset(fifo, _t, CDC_DATA_SZ);
-        usbd_ep_write(dev, ep, fifo, CDC_DATA_SZ);
-    }
+	static void HandleWrite(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+		int32_t rlen;
+		if (txpos > 0) {
+			rlen = usbd_ep_write(dev, ep, txbuf, (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ);
+			if (rlen > 0) {
+//				txpos = 0; // TODO
+			}
+		}
+	}
 
-    /**
-     * Read new data from OUT EP
+	/**
+	 * Read new data from OUT EP (if there is enough space in rxbuf)
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
 	 * @param ep    - triggered EP
-     */
-    static void HandleRead (usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
-       usbd_ep_read(dev, ep, fifo, CDC_DATA_SZ);
-    }
-    //TODO: read/write fifo logic, finish ll driver
+	 */
+	static void HandleRead (usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+		int32_t rlen;
+		if (rxpos < (USB_BUF_SIZE - CDC_DATA_SZ)) {
+			rlen = usbd_ep_read(dev, ep, rxbuf, CDC_DATA_SZ);
+			if (rlen > 0) {
+				rxpos = rxpos
+			}
+		}
+	}
+public:
+	static void Init() noexcept {
+		txpos = 0;
+		rxpos = 0;
+		flushBuffer(txbuf, USB_BUF_SIZE);
+		flushBuffer(rxbuf, USB_BUF_SIZE);
+
+		usbd_init(&usb_udev, &usbd_hw, CDC_EP0_SIZE, usb_ubuf, sizeof(usb_ubuf));
+		usbd_reg_config(&usb_udev,  usb_cdc_c::SetConfig);
+		usbd_reg_control(&usb_udev, usb_cdc_c::ContorlHandler);
+		usbd_reg_descr(&usb_udev,   usb_cdc_c::GetDescriptor);
+
+		NVIC_SetPriority(USB_IRQn, 3); // 0 is the highest (L0 has no subprio)
+		NVIC_EnableIRQ(USB_IRQn);
+		usbd_enable(&usb_udev, true);
+		usbd_connect(&usb_udev, true);
+	}
+	// TODO: rework
+	static void Write(const char * msg, uint32_t length) noexcept {
+		if (length > USB_BUF_SIZE) {
+			return;
+		}
+
+		__disable_irq(); // copy should be fast enough to preserve irq from ruin
+		flushBuffer(txbuf, USB_BUF_SIZE);
+		for (txpos = 0; txpos < length;) {
+			txbuf[txpos] = static_cast<uint8_t>(msg[txpos]);
+			txpos++; // txpos will be equal to msg length in the end
+		}
+		__enable_irq();
+	}
+
+	static void Read(char * buf, uint32_t length) noexcept {
+		if (length < USB_BUF_SIZE) {
+			return;
+		}
+
+		__disable_irq();
+		for (uint32_t i = 0; i < length; i++) {
+			buf[i] = static_cast<char>(rxbuf[i]);
+		}
+		flushBuffer(rxbuf, USB_BUF_SIZE);
+		__enable_irq();
+	}
 };
 
-typedef usb_cdc_c usb;
+typedef usb_cdc_c cdc;
 
 #endif /* __INCLUDE_USB_CDC_HPP_ */
