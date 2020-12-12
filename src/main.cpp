@@ -4,6 +4,11 @@
 #include "gpio.hpp"
 #include "led.hpp"
 #include "cdc.hpp"
+#include "bootloader.hpp"
+
+extern "C" {
+#include "retarget_bkpt.h"
+}
 
 //extern usbd_device usb_udev;
 
@@ -14,9 +19,23 @@ int main() {
 	gpio::Init();
 
 	led::Init();
-	usb::Init();
+	cdc::Init();
+	bootloader::Init();
 
 	while(1) {
+		auto rxlen = cdc::GetRxLen();
+		auto txlen = cdc::GetTxLen();
+
+////		cdc::WriteCharNonBlk('0' + i);
+////		cdc::FlushTx();
+//		ch = cdc::ReadChar();
+//		if (ch != 0) {
+//			cdc::WriteCharBlk(ch);
+//		}
+//
+////		SHTRACE("ch %c", ch);
+//		SHTRACE("TX %lu RX %lu", txlen, rxlen);
+////		delay_ms(500);
 
 	}
 }

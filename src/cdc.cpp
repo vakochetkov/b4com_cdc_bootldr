@@ -7,10 +7,10 @@
 
 #include "cdc.hpp"
 
-uint8_t    usb_cdc_c::txbuf[USB_BUF_SIZE];
-int32_t    usb_cdc_c::txpos;
-uint8_t    usb_cdc_c::rxbuf[USB_BUF_SIZE];
-int32_t    usb_cdc_c::rxpos;
+uint8_t usb_cdc_c::txbuf[USB_BUF_SIZE];
+int32_t volatile usb_cdc_c::txpos;
+uint8_t usb_cdc_c::rxbuf[USB_BUF_SIZE];
+int32_t volatile usb_cdc_c::rxpos;
 
 extern "C" {
 

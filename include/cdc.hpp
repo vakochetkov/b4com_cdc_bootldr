@@ -164,22 +164,28 @@ static const struct cdc_config config_desc = {
 };
 
 static struct usb_cdc_line_coding cdc_line = {
-    .dwDTERate          = 115200,
+    .dwDTERate          = 250000,
     .bCharFormat        = USB_CDC_1_STOP_BITS,
     .bParityType        = USB_CDC_NO_PARITY,
     .bDataBits          = 8,
 };
 } // extern "C"
 
-constexpr uint32_t USB_BUF_SIZE = 512; // CDC_DATA_SZ
+constexpr uint32_t USB_BUF_SIZE = 512; // 8 * CDC_DATA_SZ
 
 class usb_cdc_c {
-	static uint8_t    txbuf[USB_BUF_SIZE];
-	static int32_t    txpos;
-	static uint8_t    rxbuf[USB_BUF_SIZE];
-	static int32_t    rxpos;
+	static uint8_t    txbuf[USB_BUF_SIZE];	// tx user "hot" buffer, any size > CDC_DATA_SZ
+	static volatile int32_t    txpos;		// current txbuf length indicator
+	static uint8_t    rxbuf[USB_BUF_SIZE];	// rx user "hot" buffer, multiple of CDC_DATA_SZ(0x40)
+	static volatile int32_t    rxpos;		// current rxbuf length indicator
 
 	static inline void flushBuffer(uint8_t * buf, uint32_t len) {
+		for (uint32_t i = 0; i < len; i++) {
+			buf[i] = 0;
+		}
+	}
+
+	static inline void flushBuffer(volatile uint8_t * buf, uint32_t len) {
 		for (uint32_t i = 0; i < len; i++) {
 			buf[i] = 0;
 		}
@@ -277,35 +283,51 @@ class usb_cdc_c {
 
 	/**
 	 * Write new data to IN EP (if txbuf not empty)
+	 * 1. Trying write block from txbuf sizeof blen
+	 * 2. Decrease txpos by real xfered length - rlen
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
-	 * @param ep    - triggered EP
+	 * @param ep    - triggered TX EP
 	 */
 	static void HandleWrite(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
 		int32_t rlen;
 		if (txpos > 0) {
-			rlen = usbd_ep_write(dev, ep, txbuf, (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ);
+			auto blen =  (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ;
+			rlen = usbd_ep_write(dev, ep, &txbuf[txpos - blen - 1], blen);
 			if (rlen > 0) {
-//				txpos = 0; // TODO
-			}
+				txpos = txpos - rlen; 
+			} 
 		}
 	}
 
 	/**
 	 * Read new data from OUT EP (if there is enough space in rxbuf)
+	 * 1. If there are block sizeof CDC_DATA_SZ in rxbuf, trying to read to it
+	 * 2. Increase rxpos by real read length - rlen
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
-	 * @param ep    - triggered EP
+	 * @param ep    - triggered RX EP
 	 */
 	static void HandleRead (usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
 		int32_t rlen;
-		if (rxpos < (USB_BUF_SIZE - CDC_DATA_SZ)) {
-			rlen = usbd_ep_read(dev, ep, rxbuf, CDC_DATA_SZ);
-			if (rlen > 0) {
-				rxpos = rxpos
+		if (rxpos < USB_BUF_SIZE) {
+			auto blen =  ((USB_BUF_SIZE - rxpos) < CDC_DATA_SZ) ? (USB_BUF_SIZE - rxpos) : CDC_DATA_SZ;
+
+			rlen = usbd_ep_read(dev, ep, &rxbuf[rxpos], blen);
+			if (rlen > 0 && rlen <= blen) {
+				rxpos = rxpos + rlen; // possible overflow???
 			}
 		}
 	}
+
+	static inline void ENABLE_IRQ() noexcept {
+		NVIC_EnableIRQ(USB_IRQn);
+	}
+
+	static inline void DISABLE_IRQ() noexcept {
+		NVIC_DisableIRQ(USB_IRQn);
+	}
+
 public:
 	static void Init() noexcept {
 		txpos = 0;
@@ -318,37 +340,113 @@ public:
 		usbd_reg_control(&usb_udev, usb_cdc_c::ContorlHandler);
 		usbd_reg_descr(&usb_udev,   usb_cdc_c::GetDescriptor);
 
-		NVIC_SetPriority(USB_IRQn, 3); // 0 is the highest (L0 has no subprio)
-		NVIC_EnableIRQ(USB_IRQn);
+		NVIC_SetPriority(USB_IRQn, 3); // 0 is the highest (L0xx has no subprio)
+		ENABLE_IRQ();
 		usbd_enable(&usb_udev, true);
 		usbd_connect(&usb_udev, true);
 	}
-	// TODO: rework
-	static void Write(const char * msg, uint32_t length) noexcept {
-		if (length > USB_BUF_SIZE) {
-			return;
-		}
 
-		__disable_irq(); // copy should be fast enough to preserve irq from ruin
-		flushBuffer(txbuf, USB_BUF_SIZE);
-		for (txpos = 0; txpos < length;) {
-			txbuf[txpos] = static_cast<uint8_t>(msg[txpos]);
-			txpos++; // txpos will be equal to msg length in the end
-		}
-		__enable_irq();
+	static void WriteCharNonBlk(char ch) noexcept {
+		if (txpos < USB_BUF_SIZE) {
+			txbuf[txpos] = static_cast<uint8_t>(ch);
+			txpos++;
+		} 
 	}
 
-	static void Read(char * buf, uint32_t length) noexcept {
-		if (length < USB_BUF_SIZE) {
+	static void WriteNonBlk(const char * msg, uint32_t length) noexcept {
+		if (msg == nullptr) {
+			return;
+		}
+		if (!length) {
+			return;
+		}
+		if (length > (USB_BUF_SIZE - txpos)) {
 			return;
 		}
 
-		__disable_irq();
 		for (uint32_t i = 0; i < length; i++) {
-			buf[i] = static_cast<char>(rxbuf[i]);
+			txbuf[txpos] = static_cast<uint8_t>(msg[i]);
+			txpos++;
 		}
-		flushBuffer(rxbuf, USB_BUF_SIZE);
-		__enable_irq();
+	}
+
+	static inline void WriteCharBlk(char ch) {
+		WriteCharNonBlk(ch);
+		FlushTx();
+	}
+
+	static void inline WriteBlk(const char * msg, uint32_t length) noexcept {
+		WriteNonBlk(msg, length);
+		FlushTx();
+	}
+
+	/**
+	 * Push TX FIFO to TX endpoint in chunks of CDC_DATA_SZ or less
+	 */
+	static void FlushTx() {
+		int32_t rlen  = 0;
+		int32_t txlen = 0;
+		uint8_t * p = &txbuf[0];
+
+		if (txpos <= 0) {
+			return;
+		} else {
+			while(txpos > 0) {
+				txlen = (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ;
+				rlen = usbd_ep_write(&usb_udev, CDC_TXD_EP, p, txlen);
+				if (rlen > 0) {
+					txpos -= rlen;
+					p += rlen;
+				} else {
+					return;
+				}
+			}
+		}
+	}
+
+	static void Read(char * msg, uint32_t length) noexcept {
+		if (msg == nullptr) {
+			return;
+		}
+		if (!length) {
+			return;
+		}
+		if (length > rxpos) {
+			return;
+		}
+
+		for (uint32_t i = 0; i < length; i++) {
+			msg[i] = static_cast<char>(rxbuf[rxpos - 1]);
+			rxpos--;
+		}
+	}
+
+	static char ReadChar() noexcept {
+		char tmp;
+		if (rxpos < 1) {
+			return 0;
+		}
+
+		tmp = static_cast<char>(rxbuf[0]);
+		memmove(&rxbuf[0], &rxbuf[1], USB_BUF_SIZE - 1);
+		rxpos--;
+		return tmp;
+	}
+
+	static inline volatile uint8_t * GetRxBuf() noexcept {
+		return &rxbuf[0];
+	}
+
+	static inline int32_t GetRxLen() noexcept {
+		return rxpos;
+	}
+
+	static inline volatile uint8_t * GetTxBuf() noexcept {
+		return &txbuf[0];
+	}
+
+	static inline int32_t GetTxLen() noexcept {
+		return txpos;
 	}
 };
 

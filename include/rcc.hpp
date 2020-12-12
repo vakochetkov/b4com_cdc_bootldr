@@ -14,12 +14,12 @@ extern "C" {
 #define CORE_CLOCK 32000000
 #define USB_CLOCK  48000000
 
-volatile uint32_t SYS_TICK = 0;
+extern volatile uint32_t SYS_TICK;
+void SysTick_Handler(void);
 
-void SysTick_Handler(void) {
-	SYS_TICK++;
-}
-}
+void delay_ms(uint16_t ms);
+
+} // extern "C"
 
 class rcc_c {
 
@@ -50,6 +50,10 @@ public:
 
 	static void InitSysTick() noexcept {
 		SysTick_Config(CORE_CLOCK/1000);
+	}
+
+	static volatile uint32_t GetTick() noexcept {
+		return SYS_TICK;
 	}
 
 	inline static void Reset(void) noexcept { NVIC_SystemReset(); }
