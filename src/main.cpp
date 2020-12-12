@@ -10,7 +10,7 @@ extern "C" {
 #include "retarget_bkpt.h"
 }
 
-//extern usbd_device usb_udev;
+char ch = '@';
 
 int main() {
 
@@ -28,10 +28,11 @@ int main() {
 
 ////		cdc::WriteCharNonBlk('0' + i);
 ////		cdc::FlushTx();
-//		ch = cdc::ReadChar();
-//		if (ch != 0) {
-//			cdc::WriteCharBlk(ch);
-//		}
+		ch = cdc::ReadChar();
+		if (ch != 0) {
+			cdc::WriteCharBlk(ch);
+			delay_ms(10);
+		}
 //
 ////		SHTRACE("ch %c", ch);
 //		SHTRACE("TX %lu RX %lu", txlen, rxlen);
