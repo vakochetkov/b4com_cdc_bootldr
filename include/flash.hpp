@@ -11,6 +11,8 @@
 #include "stm32l0xx_common.hpp"
 #include "rcc.hpp"
 
+
+
 template<size_t TWriteBlockSize>
 class flash_c {
 
@@ -32,6 +34,6 @@ public:
 	}
 };
 
-typedef flash_c<64> flash; // STM32L052 default write is half-page(64)
+typedef flash_c<128> flash; // for STM32L052 should be 64 byte (half-page) aligned
 
 #endif /* INCLUDE_FLASH_HPP_ */

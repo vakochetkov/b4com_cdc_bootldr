@@ -1,0 +1,79 @@
+=============================================================================
+STM32L0 USB CDC bootloader protocol description
+ver. 1.0
+=============================================================================
+
+There is "magic" word at the beginning of EEPROM to define FW state.
+It could be:
+* FLASH_EMPTY       = 0xFFFFFFFF - FLASH is empty
+* FLASH_ZERO        = 0x00000000 - FLASH is occasionally zero
+* FLASH_IS_UPDATED  = 0xB4C0CCCC - FLASH contains up-to-date FW
+* FLASH_NEED_UPDATE = 0xB4C0AAAA - FLASH need to be updated by bootloader
+
+=============================================================================
+
+Overall, the bootloader control flow is:
+1. Initialize MCU and check "magic word" in EEPROM at 0x00
+2. If it is FLASH_EMPTY/FLASH_ZERO/FLASH_IS_UPDATED jump to user FW
+   Otherwise, try to execute firmware programming sequence
+   
+=============================================================================
+
+Firmware programming sequence:
+1. Start USB CDC 
+
+2. Wait for "BTLDR_START\n" command from USB host for 30000ms
+   * If received, send "ACK\n"
+   * If not "ACK\n" or timeout, do reset
+   
+3. Wait for device name for 1000ms, for example "BTLDR_SMART_DOOR_V2\n" 
+   * If received and match, send "ACK\n"
+   * If mismatched with internal value, send "BAD_DEVNAME\n" and do reset
+   * If not "ACK\n" or timeout, do reset
+   
+4. Wait for incoming firmware parameters for 1000ms
+   Message format:
+   "BTLDR_" + 'S' + @size + 'A' + @addr + 'C' + @crc + 'B' + @chunk + '\n'
+					32768		  ‭2147486720‬	‭5895513235   256
+   @size  - firmware size in bytes, 4 bytes long
+   @addr  - firmware start address in bytes, 4 bytes long
+   @crc   - firmware STM32 format CRC in bytes, 4 bytes long
+   @chunk - chunk size in bytes, which will be used for firmware receiption, 4 bytes long
+   * If received and all parameters is valid, send "ACK\n"
+   * If received message is invalid, send "BAD_PARAMS\n"
+   * If size  is invalid, send "BAD_SIZE\n"
+   * If addr  is invalid, send "BAD_ADDR\n"
+   * If crc   is invalid, send "BAD_CRC\n"
+   * If chunk size is invalid, send "BAD_CHUNK\n"
+   * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n"
+   * If not "ACK\n" or timeout, do reset
+   
+5. Receive and flash N chunks of firmware bytes, timeout is 1000ms
+   Message format:
+   "BTLDR_" + 'B' + @chunk_number + 'D' + @chunk_data
+   @chunk_number  - current chunk number starting from 0, 4 bytes long
+   @chunk_data    - chunk of firmware bytes, @chunk bytes long
+   * If chunk is successfully received and flashed, send "ACK\n"
+   * If received message is invalid, send "BAD_FW_CHUNK\n"
+   * If received message is invalid, send "BAD_FW_CHUNK\n"
+   * If not "ACK\n" or timeout, do reset
+
+6. Wait for "BTLDR_CHECK", timeout is 1000ms
+   * If firmware is successfully flashed, send "ACK\n", set "magic" word FLASH_IS_UPDATED and execute user FW
+   * If received message is invalid, send "BAD_FLASH_CMD\n"
+   * If firmware read is failed, send "BAD_FLASH_READ\n"
+   * If calculated CRC mismatch, send "BAD_FLASH_CRC\n"
+   * If not "ACK\n" or timeout, do reset
+
+=============================================================================
+
+Bootloader execute the following sequence to jump to user firmware:
+1. Disable USB
+2. Disable and clear all interrupts
+3. Set MSP and VTOR
+4. Jump to user firmware start address, usually triggering startup sequence in user firmware
+
+NB: this trick can be done by programming FLASH_IS_UPDATED to EEPROM and soft-reset MCU
+
+
+

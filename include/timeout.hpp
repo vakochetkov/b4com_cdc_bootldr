@@ -27,6 +27,7 @@ class timeout_c {
 	TTick startTick;
 	TTick interval;
 	timeout_state_t state;
+
 public:
 	timeout_c() noexcept
 	: startTick(0), interval(0), state(timeout_state_t::ST_IDLE)
@@ -38,18 +39,24 @@ public:
 		startTick = FGetTick();
 	}
 
-	void Check() noexcept {
+	void Update() noexcept {
 		if ((FGetTick() - startTick) >= interval) {
 			state = timeout_state_t::ST_ALARM;
 		}
 	}
 
-	bool IsAlarmed() noexcept {
+	bool IsTimeOut() noexcept {
 		if (state == timeout_state_t::ST_ALARM) {
 			return true;
 		} else {
 			return false;
 		}
+	}
+
+	inline void Clear() noexcept {
+		startTick =0;
+		interval = 0;
+		state = timeout_state_t::ST_IDLE;
 	}
 };
 

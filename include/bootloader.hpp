@@ -14,6 +14,13 @@
 #include "flash.hpp"
 #include "timeout.hpp"
 
+enum class btldr_magic_word_t : uint32_t {
+	MW_FLASH_EMPTY       = 0xFFFFFFFF,
+	MW_FLASH_ZERO        = 0x00000000,
+	MW_FLASH_IS_UPDATED  = 0xB4C0CCCC,
+	MW_FLASH_NEED_UPDATE = 0xB4C0AAAA
+};
+
 template<size_t TBlockSize> // FW block size
 class bootloader_c {
 	enum class btldr_cmd_t : uint8_t {
@@ -27,9 +34,10 @@ public:
 
 		Timeout t;
 		t.Set(100);
-		while(!t.IsAlarmed()) {
-			t.Check();
+		while(!t.IsTimeOut()) {
+			t.Update();
 		}
+		t.Clear();
 	}
 
 
