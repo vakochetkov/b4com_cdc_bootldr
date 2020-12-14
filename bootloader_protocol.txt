@@ -54,8 +54,8 @@ Firmware programming sequence:
    @chunk_number  - current chunk number starting from 0, 4 bytes long
    @chunk_data    - chunk of firmware bytes, @chunk bytes long
    * If chunk is successfully received and flashed, send "ACK\n"
-   * If received message is invalid, send "BAD_FW_CHUNK\n"
-   * If received message is invalid, send "BAD_FW_CHUNK\n"
+   * If received message is invalid,      send "BAD_FW_CHUNK\n"
+   * If received chunk number is invalid, send "BAD_FW_CHUNKNUM\n"
    * If not "ACK\n" or timeout, do reset
 
 6. Wait for "BTLDR_CHECK", timeout is 1000ms

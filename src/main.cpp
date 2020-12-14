@@ -19,8 +19,11 @@ int main() {
 	gpio::Init();
 
 	led::Init();
+	bootloader::Init();
+
+
 	cdc::Init(); // TODO: after succesfull check ONLY!
-//	bootloader::Init();
+
 
 	while(1) {
 		auto rxlen = cdc::GetRxLen();
