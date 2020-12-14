@@ -10,7 +10,7 @@ extern "C" {
 #include "retarget_bkpt.h"
 }
 
-char ch = '@';
+static char chs[20];
 
 int main() {
 
@@ -19,8 +19,8 @@ int main() {
 	gpio::Init();
 
 	led::Init();
-	cdc::Init();
-	bootloader::Init();
+	cdc::Init(); // TODO: after succesfull check ONLY!
+//	bootloader::Init();
 
 	while(1) {
 		auto rxlen = cdc::GetRxLen();
@@ -28,11 +28,10 @@ int main() {
 
 ////		cdc::WriteCharNonBlk('0' + i);
 ////		cdc::FlushTx();
-		ch = cdc::ReadChar();
-		if (ch != 0) {
-			cdc::WriteCharBlk(ch);
-			delay_ms(10);
-		}
+		cdc::ReadChar();
+		sprintf(chs, "\nr:%d t:%d\n", rxlen, txlen);
+		cdc::WriteBlk(chs, 20);
+		delay_ms(10);
 //
 ////		SHTRACE("ch %c", ch);
 //		SHTRACE("TX %lu RX %lu", txlen, rxlen);

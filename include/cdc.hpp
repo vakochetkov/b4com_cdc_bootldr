@@ -372,12 +372,31 @@ public:
 
 	static inline void WriteCharBlk(char ch) {
 		WriteCharNonBlk(ch);
-		FlushTx();
+		FlushChar();
 	}
 
 	static void inline WriteBlk(const char * msg, uint32_t length) noexcept {
 		WriteNonBlk(msg, length);
 		FlushTx();
+	}
+
+	/**
+	 * Push one char from TX FIFO to TX endpoint
+	 */
+	static void FlushChar() {
+		int32_t rlen  = 0;
+
+		if (txpos <= 0) {
+			return;
+		} else {
+			rlen = usbd_ep_write(&usb_udev, CDC_TXD_EP, &txbuf[0], 1);
+			if (rlen > 0) {
+				txpos--;
+				memmove(&txbuf[0], &txbuf[1], txpos);
+			} else {
+				return;
+			}
+		}
 	}
 
 	/**
@@ -415,21 +434,28 @@ public:
 			return;
 		}
 
+		uint32_t freeLen = rxpos - length;
 		for (uint32_t i = 0; i < length; i++) {
-			msg[i] = static_cast<char>(rxbuf[rxpos - 1]);
-			rxpos--;
+			msg[i] = static_cast<char>(rxbuf[i]);
 		}
+		if (freeLen > 0) {
+			memmove(&rxbuf[0], &rxbuf[length], freeLen);
+			rxpos = freeLen;
+		} else {
+			rxpos = 0;
+		}
+
 	}
 
-	static char ReadChar() noexcept {
+	static char ReadChar() noexcept { //FIXME: что-то тут не так
 		char tmp;
 		if (rxpos < 1) {
 			return 0;
 		}
 
 		tmp = static_cast<char>(rxbuf[0]);
-		memmove(&rxbuf[0], &rxbuf[1], USB_BUF_SIZE - 1);
 		rxpos--;
+		memmove(&rxbuf[0], &rxbuf[1], rxpos);
 		return tmp;
 	}
 

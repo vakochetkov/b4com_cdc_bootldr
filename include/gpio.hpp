@@ -110,7 +110,7 @@ public:
 			PORTx(port)->BSRR |= ((value & 0x1) ? (1 << pin) : (1 << (pin + 16)));
 		}
 		static uint8_t ReadPin(GPIO_PORT_t port, uint8_t pin) noexcept {
-			return ((static_cast<uint8_t>(PORTx(port)->IDR) >> pin) & 0x1);
+			return ((static_cast<uint16_t>(PORTx(port)->IDR) >> pin) & 0x1);
 		}
 };
 
