@@ -8,17 +8,14 @@
 #ifndef INCLUDE_FLASH_HPP_
 #define INCLUDE_FLASH_HPP_
 
-#include "stm32l0xx_common.hpp"
-#include "rcc.hpp"
+#include "flash_stm32l0x2_drv.hpp"
 
-
-
-template<size_t TWriteBlockSize>
+template<auto TDriver, size_t TWriteBlockSize>
 class flash_c {
 
 public:
 	static void Init() noexcept {
-
+		TDriver->Init();
 	}
 
 	static void Write() noexcept {
@@ -34,6 +31,6 @@ public:
 	}
 };
 
-typedef flash_c<128> flash; // for STM32L052 should be 64 byte (half-page) aligned
+typedef flash_c<&flash_stm32l0x2_drv,128> flash; // for STM32L052 should be 64 byte (half-page) aligned
 
 #endif /* INCLUDE_FLASH_HPP_ */
