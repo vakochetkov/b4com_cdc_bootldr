@@ -20,8 +20,14 @@
 
 #define __RAM_FUNC __attribute__ ((section(".ram")))
 
+static constexpr uint32_t FLASH_BLOCK_SIZE  = 128;
+static constexpr uint32_t EEPROM_BLOCK_SIZE = 4;
+
 constexpr uint32_t FLASH_BASE_ADDR   = 0x08000000;
 constexpr uint32_t EEPROM_BASE_ADDR  = 0x08080000;
+
+static constexpr uint32_t FLASH_BASE_ADDR_END   = 0x0800FFFF;
+static constexpr uint32_t EEPROM_BASE_ADDR_END  = 0x080807FF;
 
 /*
  * To perform a write/erase operation, unlock PELOCK bit of the FLASH_PECR register.
@@ -117,7 +123,7 @@ class flash_stm32l0x2_drv_c : public flash_drv_c {
 	const uint32_t OPTBYTE_LOCK_KEY1 = 0xFBEAD9C8;
 	const uint32_t OPTBYTE_LOCK_KEY2 = 0x24252627;
 
-	uint32_t timeout = 100; // ms
+	uint32_t timeout = 0; // ms
 
 	inline uint8_t isFlashBusy() noexcept {
 		return FLASHx->SR.bit.BUSY;
@@ -138,12 +144,54 @@ class flash_stm32l0x2_drv_c : public flash_drv_c {
 		}
 	}
 
-	__RAM_FUNC void writeHalfPage(uint32_t addr) noexcept {
-		// check address, then follow RM appendix
+	inline bool isRegionEEPROM(uint32_t addr) {
+		return ((addr < EEPROM_BASE_ADDR_END) && (addr >= EEPROM_BASE_ADDR));
 	}
 
-	__RAM_FUNC void erasePage(uint32_t addr) noexcept {
+	inline bool isRegionFLASH(uint32_t addr) {
+		return ((addr < FLASH_BASE_ADDR_END) && (addr >= FLASH_BASE_ADDR));
+	}
 
+	__RAM_FUNC void writeFlashHalfPage(uint32_t addr, uint32_t * data) noexcept {
+		FLASHx->PECR.bit.PROG = 1;
+		FLASHx->PECR.bit.FPRG = 1;
+
+		for (uint8_t i = 0; i < ((TBlockSizeNVM / 2) / sizeof(uint32_t)); i++) {
+			*(__IO uint32_t *)(addr) = *data++;
+		}
+
+		if (!waitFlashBusy()) {
+			FLASHx->PECR.bit.PROG = 0;
+			FLASHx->PECR.bit.FPRG = 0;
+			return;
+		}
+
+		if (FLASHx->SR.bit.EOP != 0) {
+			FLASHx->SR.bit.EOP = 1; // clear by writing 1
+		}
+
+		FLASHx->PECR.bit.PROG = 0;
+		FLASHx->PECR.bit.FPRG = 0;
+	}
+
+	__RAM_FUNC void eraseFlashPage(uint32_t pageAddr) noexcept {
+		FLASHx->PECR.bit.PROG  = 1;
+		FLASHx->PECR.bit.ERASE = 1;
+
+		*(__IO uint32_t *)pageAddr = static_cast<uint32_t>(0);
+
+		if (!waitFlashBusy()) {
+			FLASHx->PECR.bit.PROG  = 0;
+			FLASHx->PECR.bit.ERASE = 0;
+			return;
+		}
+
+		if (FLASHx->SR.bit.EOP != 0) {
+			FLASHx->SR.bit.EOP = 1; // clear by writing 1
+		}
+
+		FLASHx->PECR.bit.PROG  = 0;
+		FLASHx->PECR.bit.ERASE = 0;
 	}
 
 protected:
@@ -153,9 +201,7 @@ protected:
 		1, // NVM_ERASE
 		1, // EEPROM_READ
 		1, // EEPROM_WRITE
-		1, // EEPROM_ERASE
-		0, // OPTBYTE_READ
-		0  // OPTBYTE_MODIFY
+		1  // EEPROM_ERASE
 	};
 
 public:
@@ -167,7 +213,8 @@ public:
 	}
 
 	void Init() noexcept {
-
+		this->SetTimeout(200);
+		FLASHx->PECR.bit.FIX = 1; // force erase on write for fix latency
 	}
 
 	inline uint32_t GetTimeout() noexcept {
@@ -194,7 +241,7 @@ public:
 		}
 
 		if (FLASHx->PECR.bit.PELOCK == 0) {
-			if (FLASHx->PECR.bit.PGRLOCK != 0) {
+			if (FLASHx->PECR.bit.PRGLOCK != 0) {
 				FLASH->PRGKEYR = NVM_LOCK_KEY1;
 				FLASH->PRGKEYR = NVM_LOCK_KEY2;
 			}
@@ -235,7 +282,7 @@ public:
 		}
 	}
 
-	uint8_t LockEEPROM() noexcept {
+	uint8_t LockEEPROM() noexcept { // deprecated
 		if (!waitFlashBusy()) {
 			return 0;
 		}
@@ -245,7 +292,7 @@ public:
 
 	// First key:  0xFBEAD9C8
 	// Second key: 0x24252627
-	uint8_t UnlockOPT() noexcept {
+	uint8_t UnlockOPT() noexcept { // deprecated
 		if (!waitFlashBusy()) {
 			return 0;
 		}
@@ -273,10 +320,10 @@ public:
 	}
 
 	void ReadBlockNVM(uint32_t addr, uint32_t * buffer, uint32_t length) noexcept {
-		if (length < TBlockSizeNVM) {
+		if (length == 0) {
 			return;
 		}
-		if ((length % sizeof(uint32_t)) != 0) {
+		if ((addr % sizeof(uint32_t)) != 0) {
 			return;
 		}
 
@@ -286,41 +333,77 @@ public:
 	}
 
 	void WriteBlockNVM(uint32_t addr, uint32_t * buffer, uint32_t length) noexcept {
-		//writeHalfPage 1
-		//writeHalfPage 2
+		if ((addr - FLASH_BASE_ADDR) % TBlockSizeNVM != 0) {
+			return;
+		}
+		if (!isRegionFLASH(addr)) {
+			return;
+		}
+		if (!isRegionFLASH(addr + (length * 4) - 1)) {
+			return;
+		}
+
+		writeFlashHalfPage(addr, &buffer[0]);
+		writeFlashHalfPage(addr + (TBlockSizeNVM / 2), &buffer[0 + ((TBlockSizeNVM / 2) / sizeof(uint32_t))]);
 	}
 
 	void EraseBlockNVM(uint32_t addr) noexcept {
-		// erasePage
+		if ((addr - FLASH_BASE_ADDR) % TBlockSizeNVM != 0) {
+			return;
+		}
+		if (!isRegionFLASH(addr)) {
+			return;
+		}
+		if (!isRegionFLASH(addr + TBlockSizeNVM)) {
+			return;
+		}
+
+		eraseFlashPage(addr);
 	}
 
-	void ReadBlockEEPROM() noexcept {
+	void ReadBlockEEPROM(uint32_t addr, uint32_t * buffer, uint32_t length) noexcept {
+		if (!isRegionEEPROM(addr)) {
+			return;
+		}
+		if (addr % sizeof(uint32_t) != 0) {
+			return;
+		}
+		if (length < (TBlockSizeEEPROM / sizeof(uint32_t))) {
+			return;
+		}
 
+		buffer[0] = *(uint32_t *)(addr);
 	}
 
-	void WriteBlockEEPROM() noexcept {
+	void WriteBlockEEPROM(uint32_t addr, uint32_t * buffer, uint32_t length) noexcept {
+		if (!isRegionEEPROM(addr)) {
+			return;
+		}
+		if (length != 1) {
+			return;
+		}
+		if (addr % sizeof(uint32_t) != 0) {
+			return;
+		}
 
+		*(uint32_t *)(addr) = static_cast<uint32_t>(buffer[0]);
 	}
 
-	void EraseBlockEEPROM() noexcept {
+	void EraseBlockEEPROM(uint32_t addr) noexcept {
+		if (!isRegionEEPROM(addr)) {
+			return;
+		}
+		if (addr % sizeof(uint32_t) != 0) { // check addr aligment
+			return;
+		}
 
+		*(uint32_t *)(addr) = static_cast<uint32_t>(0xFFFFFFFF); // write 0xFF...
 	}
 
-	void ReadOptByte() noexcept {
-		// isTODO:
-	}
-
-	void WriteOptByte() noexcept {
-		// isTODO:
-	}
-
-	void EraseOptByte() noexcept {
-		// isTODO:
-	}
 };
 
-extern flash_stm32l0x2_drv_c<128,2048> flash_stm32l0x2_drv;
+extern flash_stm32l0x2_drv_c<FLASH_BLOCK_SIZE,EEPROM_BLOCK_SIZE> flash_stm32l0x2_drv;
 
-#undef FLASHx
+#undef FLASHx // undefine base address macro
 
 #endif /* INCLUDE_FLASH_STM32L0_DRV_HPP_ */

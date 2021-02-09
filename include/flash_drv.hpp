@@ -23,8 +23,6 @@ protected:
 		uint8_t EEPROM_READ  : 1;
 		uint8_t EEPROM_WRITE : 1;
 		uint8_t EEPROM_ERASE : 1;
-		uint8_t OPTBYTE_READ   : 1;
-		uint8_t OPTBYTE_MODIFY : 1;
 	} is_supported_t;
 
 public:
@@ -41,17 +39,14 @@ public:
 	virtual uint8_t UnlockOPT() 	= 0;
 	virtual uint8_t LockOPT() 		= 0;
 
-	virtual void ReadBlockNVM()	 = 0;
-	virtual void WriteBlockNVM() = 0;
-	virtual void EraseBlockNVM() = 0;
+	// XXX: WARN! buffer length is in words, not in bytes
+	virtual void ReadBlockNVM(uint32_t addr, uint32_t * buffer, uint32_t length)  = 0;
+	virtual void WriteBlockNVM(uint32_t addr, uint32_t * buffer, uint32_t length) = 0;
+	virtual void EraseBlockNVM(uint32_t addr) = 0;
 
-	virtual void ReadBlockEEPROM()	= 0;
-	virtual void WriteBlockEEPROM() = 0;
-	virtual void EraseBlockEEPROM() = 0;
-
-	virtual void ReadOptByte()	= 0;
-	virtual void WriteOptByte() = 0;
-	virtual void EraseOptByte() = 0;
+	virtual void ReadBlockEEPROM(uint32_t addr, uint32_t * buffer, uint32_t length)	 = 0;
+	virtual void WriteBlockEEPROM(uint32_t addr, uint32_t * buffer, uint32_t length) = 0;
+	virtual void EraseBlockEEPROM(uint32_t addr) = 0;
 };
 
 

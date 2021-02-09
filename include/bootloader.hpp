@@ -11,10 +11,13 @@
 #include "stm32l0xx_common.hpp"
 #include "rcc.hpp"
 #include "cdc.hpp"
+#include "led.hpp"
 #include "flash.hpp"
 #include "timeout.hpp"
 
-static constexpr uint32_t MAX_CHUNK_SIZE = 256;
+extern "C" {
+#include "retarget_bkpt.h"
+}
 
 enum class btldr_magic_word_t : uint32_t {
 	MW_FLASH_EMPTY       = 0xFFFFFFFF,
@@ -43,10 +46,10 @@ typedef union {
 		char b;
 		uint32_t block_number;
 		char d;
-		uint8_t data_block[MAX_CHUNK_SIZE];
+		uint8_t data_block[CHUNK_SIZE];
 	} __attribute__((__packed__));
 
-	uint8_t data[1 + 4 + 1 + MAX_CHUNK_SIZE];
+	uint8_t data[1 + 4 + 1 + CHUNK_SIZE];
 } btldr_chunk_t;
 
 
@@ -83,17 +86,20 @@ class bootloader_c {
 
 public:
 	static void Init() noexcept {
-		flash::Init(); // XXX: just demo, to be deleted
+		flash::Init();
 
-		Timeout t; // XXX: just demo, to be deleted
-		t.Set(100);
-		while(!t.IsTimeOut()) {
-			t.Update();
-		}
-		t.Clear();
 	}
 
+	static void SelfTest() noexcept {
+		uint32_t word = flash::ReadWordEEPROM();
+		SHTRACE("#1 Read MW: %#010x", word);
 
+		flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_NEED_UPDATE));
+		word = flash::ReadWordEEPROM();
+		SHTRACE("#2 Read MW: %#010x", word);
+
+//		flash::EraseAll(); // TODO: flash write/erase/read
+	}
 };
 
 template<size_t TBlockSize>
@@ -126,7 +132,7 @@ btldr_params_t bootloader_c<TBlockSize>::params = {0};
 template<size_t TBlockSize>
 btldr_chunk_t bootloader_c<TBlockSize>::fwblock = {0};
 
-typedef bootloader_c<MAX_CHUNK_SIZE> bootloader;
+typedef bootloader_c<CHUNK_SIZE> bootloader;
 
 
 #endif /* INCLUDE_BOOTLOADER_HPP_ */

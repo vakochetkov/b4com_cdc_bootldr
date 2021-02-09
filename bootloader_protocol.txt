@@ -30,15 +30,15 @@ Firmware programming sequence:
    * If received and match, send "ACK\n"
    * If mismatched with internal value, send "BAD_DEVNAME\n" and do reset
    * If not "ACK\n" or timeout, do reset
-   
+
 4. Wait for incoming firmware parameters for 1000ms
    Message format:
    "BTLDR_" + 'S' + @size + 'A' + @addr + 'C' + @crc + 'B' + @chunk + '\n'
 					32768		  ‭2147486720‬	‭5895513235   256
-   @size  - firmware size in bytes, 4 bytes long
-   @addr  - firmware start address in bytes, 4 bytes long
+   @size  - firmware size in bytes, 4 bytes long and aligned
+   @addr  - firmware start address in bytes, 4 bytes long and aligned
    @crc   - firmware STM32 format CRC in bytes, 4 bytes long
-   @chunk - chunk size in bytes, which will be used for firmware receiption, 4 bytes long
+   @chunk - chunk size in bytes, which will be used for firmware receiption, 4 bytes long and aligned
    * If received and all parameters is valid, send "ACK\n"
    * If received message is invalid, send "BAD_PARAMS\n"
    * If size  is invalid, send "BAD_SIZE\n"

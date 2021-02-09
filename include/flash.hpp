@@ -10,27 +10,59 @@
 
 #include "flash_stm32l0x2_drv.hpp"
 
+constexpr uint32_t CHUNK_SIZE = 128;
+constexpr uint32_t MAGICWORD_ADDR_OFFSET = 0x0;
+
+constexpr uint32_t FIRMWARE_MAX_SIZE   = 0x8000;
+constexpr uint32_t FIRMWARE_ADDR_START = FLASH_BASE_ADDR + 0x8000;
+
+
 template<auto TDriver, size_t TWriteBlockSize>
 class flash_c {
 
 public:
 	static void Init() noexcept {
 		TDriver->Init();
+		TDriver->UnlockNVM();
+		TDriver->UnlockEEPROM();
 	}
 
-	static void Write() noexcept {
-
+	static inline size_t GetBlockSize() {
+		return TWriteBlockSize;
 	}
 
-	static void Read() noexcept {
-
+	static void WriteChunk(uint32_t chunkNumber, uint32_t * data, uint32_t length) noexcept {
+		if (length != TWriteBlockSize) {
+			return;
+		}
+		TDriver->WriteBlockNVM(FIRMWARE_ADDR_START + (chunkNumber * 128), data, 128 / sizeof(uint32_t));
 	}
 
-	static void Erase() noexcept {
+	static void ReadChunk(uint32_t chunkNumber, uint32_t * data, uint32_t length) noexcept {
+		if (length < TWriteBlockSize) {
+			return;
+		}
+		TDriver->ReadBlockNVM(FIRMWARE_ADDR_START + (chunkNumber * 128), data, 128 / sizeof(uint32_t));
+	}
 
+	static void EraseAll() noexcept {
+		for (uint32_t addr = FIRMWARE_ADDR_START; addr < (FIRMWARE_MAX_SIZE / 128); addr += 128) {
+			TDriver->EraseBlockNVM(addr);
+		}
+	}
+
+	// relative addr, not absolute
+	static inline void WriteWordEEPROM(uint32_t word) noexcept {
+		TDriver->WriteBlockEEPROM(EEPROM_BASE_ADDR + MAGICWORD_ADDR_OFFSET, &word, 1);
+	}
+
+	static inline uint32_t ReadWordEEPROM() noexcept {
+		uint32_t tmp = 0;
+		TDriver->ReadBlockEEPROM(EEPROM_BASE_ADDR + MAGICWORD_ADDR_OFFSET, &tmp, 1);
+		return tmp;
 	}
 };
 
-typedef flash_c<&flash_stm32l0x2_drv,128> flash; // for STM32L052 should be 64 byte (half-page) aligned
+typedef flash_c<&flash_stm32l0x2_drv,CHUNK_SIZE> flash; // for STM32L052 should be 64 byte (half-page) aligned
 
 #endif /* INCLUDE_FLASH_HPP_ */

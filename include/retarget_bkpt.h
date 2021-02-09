@@ -26,6 +26,7 @@ extern "C" {
 
 #ifdef USE_SEMIHOSTING_VIA_DBG
 #define SHTRACE(fmt,args...) trace_bkpt("%s(%s)-" fmt "\n", __FILE__, __FUNCTION__, ##args)
+#warning "SEMIHOSTING enabled! Must be turned off on release!"
 #else
 #define SHTRACE(fmt,args...) trace_wrapper("%s(%s)-" fmt "\n", __FILE__, __FUNCTION__, ##args)
 #endif

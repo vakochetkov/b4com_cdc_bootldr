@@ -54,8 +54,8 @@ public:
 	}
 
 	inline void Clear() noexcept {
-		startTick =0;
-		interval = 0;
+		startTick = 0;
+		interval  = 0;
 		state = timeout_state_t::ST_IDLE;
 	}
 };

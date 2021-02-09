@@ -7,6 +7,6 @@
 
 #include "flash_stm32l0x2_drv.hpp"
 
-flash_stm32l0x2_drv_c<128,2048> flash_stm32l0x2_drv;
+flash_stm32l0x2_drv_c<FLASH_BLOCK_SIZE,EEPROM_BLOCK_SIZE> flash_stm32l0x2_drv;
 
 

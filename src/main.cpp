@@ -21,7 +21,7 @@ int main() {
 	led::Init();
 	bootloader::Init();
 
-
+	while(1);
 	cdc::Init(); // TODO: after succesfull check ONLY!
 
 
