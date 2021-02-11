@@ -87,6 +87,7 @@ class bootloader_c {
 public:
 	static void Init() noexcept {
 		flash::Init();
+		crc32::Init();
 
 	}
 

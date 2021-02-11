@@ -9,6 +9,7 @@
 #define INCLUDE_FLASH_HPP_
 
 #include "flash_stm32l0x2_drv.hpp"
+#include "crc32.hpp"
 
 constexpr uint32_t CHUNK_SIZE = 128;
 constexpr uint32_t MAGICWORD_ADDR_OFFSET = 0x0;
