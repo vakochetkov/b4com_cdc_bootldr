@@ -94,6 +94,10 @@ public:
 
 	}
 
+	static void ProcessChar(char ch) noexcept {
+
+	}
+
 	static void SelfTest() noexcept {
 		static uint32_t data[32] = {0};
 
@@ -122,6 +126,9 @@ public:
 
 		flash::ReadChunk(0, &data[0], 128);
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+
+		uint32_t crc = crc32::CalcBufferBlocking(data, 3);
+		SHTRACE("\r\n %#010x \r\n", crc);
 
 		SHTRACE("Self-Test finished!");
 		while(1);

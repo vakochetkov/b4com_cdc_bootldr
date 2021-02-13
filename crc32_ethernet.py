@@ -1,11 +1,15 @@
 from crccheck.crc import Crc32, CrcXmodem, Crc32Mpeg2
 from crccheck.checksum import Checksum32
 
-data = bytearray.fromhex("F407A5C2")
-crc = bytearray.fromhex("FFFFFFFF")
+# both methods are valid and give right answer
+# data = [ bytearray.fromhex("000000AA"), bytearray.fromhex("00000000"), bytearray.fromhex("0000ABCD") ]
+data = bytearray.fromhex("000000AA000000000000ABCD")
+# crc = bytearray.fromhex("FFFFFFFF")
 
 crcinst = Crc32Mpeg2()
 
+# for d in data:
+    # crcinst.process(d)
 crcinst.process(data)
 
 crcbytes = crcinst.finalbytes()
@@ -15,4 +19,5 @@ crcint = crcinst.final()
 print(crcbytes)
 print(crchex)
 print(crcint)
-print(0xB5E8B5CD)
+print(0xA3771348)
+
