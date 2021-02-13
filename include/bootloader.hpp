@@ -93,11 +93,16 @@ class bootloader_c {
 		RSPD_BAD_FLASH_READ,
 		RSPD_BAD_FLASH_CRC,
 	};
+	static const char PREFIX[];
 	static const char * btldr_cmd_msg[];
 	static const char * btldr_respond_msg[];
 
 	static btldr_params_t params;
 	static btldr_chunk_t  fwblock;
+
+	static bool isParamsValid() noexcept {
+		return 1;
+	}
 
 public:
 	static void Init() noexcept {
@@ -126,6 +131,7 @@ public:
 			break;
 
 		case btldr_state_t::ST_START:
+			led::Set(1,1);
 			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_START)]);
 			if (t.IsTimeOut()) {
 				SHTRACE("START timeout");
@@ -133,9 +139,6 @@ public:
 			}
 			if (chptr != NULL) {
 				SHTRACE("START detected");
-//				SHTRACE("strlen %lu",
-//				strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
-//				cdc::WriteBlk("BTLDR_ACK\n",10);
 				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
 								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
 				state = btldr_state_t::ST_DEVNAME;
@@ -147,15 +150,39 @@ public:
 			break;
 
 		case btldr_state_t::ST_DEVNAME:
-//			SHTRACE("ST_DEVNAME");
-			t.Update();
+			led::Set(2,1);
+			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_DEVNAME)]);
 			if (t.IsTimeOut()) {
 				SHTRACE("DEVNAME timeout");
-				__BKPT(2);
+				rcc::Reset();
+			}
+			if (chptr != NULL) {
+				SHTRACE("DEVNAME detected");
+				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
+								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
+				state = btldr_state_t::ST_PARAMS;
+				SHTRACE("----");
+				t.Clear();
+				t.Set(1000);
+			} else {
+				t.Update();
 			}
 			break;
 
 		case btldr_state_t::ST_PARAMS:
+			led::Set(3,1);
+			chptr = strstr(buf, PREFIX);
+			if (t.IsTimeOut()) {
+				SHTRACE("PARAMS timeout");
+				rcc::Reset();
+			}
+			if (chptr != NULL) {
+				SHTRACE("PARAMS detected");
+				SHTRACE("%s", chptr + strlen(PREFIX));
+				__BKPT(2);
+			} else {
+				t.Update();
+			}
 			break;
 
 		case btldr_state_t::ST_FLASH:
@@ -202,6 +229,9 @@ public:
 		while(1);
 	}
 };
+
+template<size_t TBlockSize>
+const char bootloader_c<TBlockSize>::PREFIX[] = "BTLDR_";
 
 template<size_t TBlockSize>
 const char * bootloader_c<TBlockSize>::btldr_cmd_msg[] = {

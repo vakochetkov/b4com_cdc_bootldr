@@ -15,6 +15,7 @@
 extern "C" {
 #include "usb.h"
 #include "usb_cdc.h"
+#include "retarget_bkpt.h"
 }
 
 #define CDC_EP0_SIZE    0x08
@@ -433,21 +434,17 @@ public:
 		if (length > USB_BUF_SIZE) {
 			return;
 		}
-//		if (length > rxpos) { // not nessesary cause it will be just zeros
-//			return;
-//		}
 
-		uint32_t freeLen = USB_BUF_SIZE - length;
+		int32_t freeLen = USB_BUF_SIZE - length;
 		for (uint32_t i = 0; i < length; i++) {
 			msg[i] = static_cast<char>(rxbuf[i]);
 		}
 		if (freeLen > 0) {
-			memmove(&rxbuf[0], &rxbuf[length], freeLen);
-			rxpos = freeLen;
+			memmove(&rxbuf[0], &rxbuf[rxpos], USB_BUF_SIZE - rxpos);
+			rxpos = (rxpos < length) ? 0 : (rxpos - length);
 		} else {
 			rxpos = 0;
 		}
-
 	}
 
 	static char ReadChar() noexcept { //FIXME: что-то тут не так

@@ -10,7 +10,7 @@ extern "C" {
 #include "retarget_bkpt.h"
 }
 
-static constexpr uint32_t BUFSIZE = 32;
+static constexpr uint32_t BUFSIZE = 64;
 static char buffer[BUFSIZE];
 
 int main() {
@@ -29,7 +29,7 @@ int main() {
 
 
 	while(1) {
-		volatile auto rxlen = cdc::GetRxLen();
+//		volatile auto rxlen = cdc::GetRxLen();
 //		auto txlen = cdc::GetTxLen();
 
 //		while(1) {
