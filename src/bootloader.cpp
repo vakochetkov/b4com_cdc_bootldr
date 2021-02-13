@@ -16,7 +16,8 @@ extern "C" void JumpToApp(uint32_t addr) {
 	__disable_irq();
 	SCB->VTOR = addr;
 	__set_MSP(*((volatile uint32_t*) addr)); // set stack pointer
-	Jump();
+//	Jump();
+	NVIC_SystemReset(); // alternative
 }
 
 

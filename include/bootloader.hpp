@@ -61,7 +61,8 @@ typedef union {
 template<size_t TBlockSize> // FW block size
 class bootloader_c {
 	enum class btldr_state_t : uint8_t {
-		ST_START = 0,
+		ST_IDLE = 0,
+		ST_START,
 		ST_DEVNAME,
 		ST_PARAMS,
 		ST_FLASH,
@@ -114,11 +115,16 @@ public:
 
 	static void ProcessNext(char * buf, uint32_t length) noexcept {
 		static char * chptr = NULL;
-		static btldr_state_t state = btldr_state_t::ST_START;
+		static btldr_state_t state = btldr_state_t::ST_IDLE;
 		static Timeout t;
 
-		t.Set(30000);
+
 		switch(state) {
+		case btldr_state_t::ST_IDLE:
+			t.Set(30000);
+			state = btldr_state_t::ST_START;
+			break;
+
 		case btldr_state_t::ST_START:
 			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_START)]);
 			if (t.IsTimeOut()) {
@@ -127,7 +133,11 @@ public:
 			}
 			if (chptr != NULL) {
 				SHTRACE("START detected");
-				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)], sizeof btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]);
+//				SHTRACE("strlen %lu",
+//				strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
+//				cdc::WriteBlk("BTLDR_ACK\n",10);
+				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
+								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
 				state = btldr_state_t::ST_DEVNAME;
 				t.Clear();
 				t.Set(1000);
@@ -135,11 +145,19 @@ public:
 				t.Update();
 			}
 			break;
+
 		case btldr_state_t::ST_DEVNAME:
-			SHTRACE("ST_DEVNAME");
+//			SHTRACE("ST_DEVNAME");
+			t.Update();
+			if (t.IsTimeOut()) {
+				SHTRACE("DEVNAME timeout");
+				__BKPT(2);
+			}
 			break;
+
 		case btldr_state_t::ST_PARAMS:
 			break;
+
 		case btldr_state_t::ST_FLASH:
 			break;
 

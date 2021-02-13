@@ -430,11 +430,14 @@ public:
 		if (!length) {
 			return;
 		}
-		if (length > rxpos) {
+		if (length > USB_BUF_SIZE) {
 			return;
 		}
+//		if (length > rxpos) { // not nessesary cause it will be just zeros
+//			return;
+//		}
 
-		uint32_t freeLen = rxpos - length;
+		uint32_t freeLen = USB_BUF_SIZE - length;
 		for (uint32_t i = 0; i < length; i++) {
 			msg[i] = static_cast<char>(rxbuf[i]);
 		}

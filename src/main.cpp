@@ -29,8 +29,14 @@ int main() {
 
 
 	while(1) {
-//		auto rxlen = cdc::GetRxLen();
+		volatile auto rxlen = cdc::GetRxLen();
 //		auto txlen = cdc::GetTxLen();
+
+//		while(1) {
+//			cdc::WriteBlk("BTLDR_ACK\n",10);
+//			delay_ms(500);
+//		}
+
 		cdc::Read(buffer, BUFSIZE);
 		bootloader::ProcessNext(buffer, BUFSIZE);
 	}
