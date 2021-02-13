@@ -10,7 +10,8 @@ extern "C" {
 #include "retarget_bkpt.h"
 }
 
-static char chs[20];
+static constexpr uint32_t BUFSIZE = 32;
+static char buffer[BUFSIZE];
 
 int main() {
 
@@ -19,23 +20,25 @@ int main() {
 	gpio::Init();
 
 	led::Init();
+	led::SetPython();
+
 	bootloader::Init();
-
 	bootloader::SelfTest();
-
 
 	cdc::Init(); // TODO: after succesfull check ONLY!
 
 
 	while(1) {
-		auto rxlen = cdc::GetRxLen();
-		auto txlen = cdc::GetTxLen();
+//		auto rxlen = cdc::GetRxLen();
+//		auto txlen = cdc::GetTxLen();
+		cdc::Read(buffer, BUFSIZE);
+		bootloader::ProcessNext(buffer, BUFSIZE);
 
 ////		cdc::WriteCharNonBlk('0' + i);
 ////		cdc::FlushTx();
 		cdc::ReadChar();
-		sprintf(chs, "\nr:%d t:%d\n", rxlen, txlen);
-		cdc::WriteBlk(chs, 20);
+//		sprintf(chs, "\nr:%d t:%d\n", rxlen, txlen);
+//		cdc::WriteBlk(chs, 20);
 		delay_ms(10);
 //
 ////		SHTRACE("ch %c", ch);

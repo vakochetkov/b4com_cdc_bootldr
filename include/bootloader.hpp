@@ -8,6 +8,7 @@
 #ifndef INCLUDE_BOOTLOADER_HPP_
 #define INCLUDE_BOOTLOADER_HPP_
 
+#include <cstring>
 #include "stm32l0xx_common.hpp"
 #include "rcc.hpp"
 #include "cdc.hpp"
@@ -18,6 +19,8 @@
 extern "C" {
 #include "retarget_bkpt.h"
 }
+
+extern "C" void JumpToApp(uint32_t addr);
 
 enum class btldr_magic_word_t : uint32_t {
 	MW_FLASH_EMPTY       = 0xFFFFFFFF,
@@ -57,6 +60,14 @@ typedef union {
 
 template<size_t TBlockSize> // FW block size
 class bootloader_c {
+	enum class btldr_state_t : uint8_t {
+		ST_START = 0,
+		ST_DEVNAME,
+		ST_PARAMS,
+		ST_FLASH,
+		ST_CHECK,
+		ST_FINISH
+	};
 	enum class btldr_msg_t : uint8_t {
 		MSG_START   = 0,
 		MSG_DEVNAME,
@@ -92,28 +103,50 @@ public:
 		flash::Init();
 		crc32::Init();
 
+		uint32_t word = flash::ReadWordEEPROM();
+		if (word != static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_IS_UPDATED)) {
+			JumpToApp(FIRMWARE_ADDR_START);
+		} else {
+			// need update
+		}
 	}
 
-	static void ProcessChar(char ch) noexcept {
+	static void ProcessNext(char * buf, uint32_t length) noexcept {
+		static char * chptr = NULL;
+		static btldr_state_t state = btldr_state_t::ST_START;
+
+//		chptr = strstr(buf, );
+		switch(state) {
+		case btldr_state_t::ST_START:
+			break;
+		case btldr_state_t::ST_DEVNAME:
+			break;
+		case btldr_state_t::ST_PARAMS:
+			break;
+		case btldr_state_t::ST_FLASH:
+			break;
+
+		default: rcc::Reset();
+		}
 
 	}
 
 	static void SelfTest() noexcept {
 		static uint32_t data[32] = {0};
 
-//		uint32_t word = flash::ReadWordEEPROM();
-//		SHTRACE("#1 Read MW: %#010x", word);
-//
-//		flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_ZERO));
-//		word = flash::ReadWordEEPROM();
-//		SHTRACE("#2 Read MW: %#010x", word);
+		uint32_t word = flash::ReadWordEEPROM();
+		SHTRACE("#1 Read MW: %#010x", word);
+
+		flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_NEED_UPDATE));
+		word = flash::ReadWordEEPROM();
+		SHTRACE("#2 Read MW: %#010x", word);
 
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
 		flash::ReadChunk(0, &data[0], 128);
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
 
 		flash_stm32l0x2_drv.EraseBlockNVM(0x800FF80);
-		flash::EraseAll(); // tTODO: flash write/erase/read
+		flash::EraseChunk(0);
 		flash::ReadChunk(0, &data[0], 128);
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
 

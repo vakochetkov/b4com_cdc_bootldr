@@ -48,6 +48,13 @@ public:
 		TDriver->ReadBlockNVM(FIRMWARE_ADDR_START + (chunkNumber * 128), data, 128 / sizeof(uint32_t));
 	}
 
+	static void EraseChunk(uint32_t chunkNumber) noexcept {
+		if (TWriteBlockSize != 128) {
+			return;
+		}
+		TDriver->EraseBlockNVM(FIRMWARE_ADDR_START + (128 * chunkNumber));
+	}
+
 	static void EraseAll() noexcept {
 		TDriver->UnlockEEPROM();
 		TDriver->UnlockNVM();

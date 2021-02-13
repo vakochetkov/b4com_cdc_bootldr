@@ -67,30 +67,34 @@ public:
 		static void ConfigAsOut(GPIO_PORT_t port, uint8_t pin, GPIO_SPEED_t speed,
 				GPIO_OUT_TYPE_t otype, GPIO_PULL_TYPE_t ptype) noexcept {
 
-			PORTx(port)->OSPEEDR |= (static_cast<uint8_t>(speed) << (pin * 2));
-			PORTx(port)->OTYPER  |= (static_cast<uint8_t>(otype) << (pin));
-			PORTx(port)->PUPDR   |= (static_cast<uint8_t>(ptype) << (pin * 2));
-			PORTx(port)->MODER   |= (static_cast<uint8_t>(GPIO_MODE_t::OUTPUT) << (pin * 2));
+			PORTx(port)->MODER   &= ~static_cast<uint32_t>(0b11 << (pin * 2));
+			PORTx(port)->OSPEEDR |= static_cast<uint32_t>(static_cast<uint8_t>(speed) << (pin * 2));
+			PORTx(port)->OTYPER  |= static_cast<uint32_t>(static_cast<uint8_t>(otype) << (pin));
+			PORTx(port)->PUPDR   |= static_cast<uint32_t>(static_cast<uint8_t>(ptype) << (pin * 2));
+			PORTx(port)->MODER   |= static_cast<uint32_t>(static_cast<uint8_t>(GPIO_MODE_t::OUTPUT) << (pin * 2));
 		}
 
 		static void ConfigAsInput(GPIO_PORT_t port, uint8_t pin, GPIO_PULL_TYPE_t ptype) noexcept {
-			PORTx(port)->PUPDR   |= (static_cast<uint8_t>(ptype) << (pin * 2));
-			PORTx(port)->MODER   |= (static_cast<uint8_t>(GPIO_MODE_t::INPUT) << (pin * 2));
+			PORTx(port)->MODER   &= ~static_cast<uint32_t>(0b11 << (pin * 2));
+			PORTx(port)->PUPDR   |= static_cast<uint32_t>(static_cast<uint8_t>(ptype) << (pin * 2));
+			PORTx(port)->MODER   |= static_cast<uint32_t>(static_cast<uint8_t>(GPIO_MODE_t::INPUT) << (pin * 2));
 		}
 
 		static void ConfigAsAlternate(GPIO_PORT_t port, uint8_t pin, GPIO_SPEED_t speed,
 									  GPIO_OUT_TYPE_t otype, GPIO_PULL_TYPE_t ptype, GPIO_ALTERNATE_t af) noexcept {
 
-			PORTx(port)->OSPEEDR |= (static_cast<uint8_t>(speed) << (pin * 2));
-			PORTx(port)->OTYPER  |= (static_cast<uint8_t>(otype) << (pin));
-			PORTx(port)->PUPDR   |= (static_cast<uint8_t>(ptype) << (pin * 2));
-			PORTx(port)->MODER   |= (static_cast<uint8_t>(GPIO_MODE_t::OUTPUT) << (pin * 2));
+			PORTx(port)->MODER   &= ~static_cast<uint32_t>(0b11 << (pin * 2));
+			PORTx(port)->OSPEEDR |= static_cast<uint32_t>(static_cast<uint8_t>(speed) << (pin * 2));
+			PORTx(port)->OTYPER  |= static_cast<uint32_t>(static_cast<uint8_t>(otype) << (pin));
+			PORTx(port)->PUPDR   |= static_cast<uint32_t>(static_cast<uint8_t>(ptype) << (pin * 2));
+			PORTx(port)->MODER   |= static_cast<uint32_t>(static_cast<uint8_t>(GPIO_MODE_t::OUTPUT) << (pin * 2));
 			PORTx(port)->AFR[((pin > 7) ? 1 : 0)] |= (static_cast<uint8_t>(af) << (pin * 4));
 		}
 
 		static void ConfigAsAnalog(GPIO_PORT_t port, uint8_t pin) noexcept {
-			PORTx(port)->PUPDR   |= (static_cast<uint8_t>(GPIO_PULL_TYPE_t::NO) << (pin * 2));
-			PORTx(port)->MODER   |= (static_cast<uint8_t>(GPIO_MODE_t::ANALOG_IN) << (pin * 2));
+			PORTx(port)->MODER   &= ~static_cast<uint32_t>(0b11 << (pin * 2));
+			PORTx(port)->PUPDR   |= static_cast<uint32_t>(static_cast<uint8_t>(GPIO_PULL_TYPE_t::NO) << (pin * 2));
+			PORTx(port)->MODER   |= static_cast<uint32_t>(static_cast<uint8_t>(GPIO_MODE_t::ANALOG_IN) << (pin * 2));
 		}
 
 		static void DeConfigure(GPIO_PORT_t port, uint8_t pin) noexcept {
@@ -110,7 +114,7 @@ public:
 			PORTx(port)->BSRR |= ((value & 0x1) ? (1 << pin) : (1 << (pin + 16)));
 		}
 		static uint8_t ReadPin(GPIO_PORT_t port, uint8_t pin) noexcept {
-			return ((static_cast<uint16_t>(PORTx(port)->IDR) >> pin) & 0x1);
+			return ((static_cast<uint16_t>(PORTx(port)->IDR) >> (pin)) & 0x1);
 		}
 };
 

@@ -12,6 +12,7 @@
 #include "gpio.hpp"
 #include "rcc.hpp"
 
+
 class led_c {
 
 public:
@@ -130,7 +131,7 @@ public:
 			}
 		}
 
-	static void SetPyton() noexcept {
+	static void SetPython() noexcept {
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 4, 1);
 			delay_ms(150);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 4, 0);
@@ -139,7 +140,7 @@ public:
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 6, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 2, 1);
 			delay_ms(150);
-			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 4, 0);
+			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 2, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 5, 1);
 			delay_ms(150);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 5, 0);
@@ -151,6 +152,15 @@ public:
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTB, 0, 0);
 		}
 
+	static void SetGroup(uint8_t ledGroup8) noexcept {
+		switch (ledGroup8)
+		{
+		case 0b00000001:
+			//придумать групповые функции
+		break;
+
+		}
+	}
 };
 
 typedef led_c led;

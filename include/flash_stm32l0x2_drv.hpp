@@ -157,68 +157,17 @@ class flash_stm32l0x2_drv_c : public flash_drv_c {
 		return ((addr < FLASH_BASE_ADDR_END) && (addr >= FLASH_BASE_ADDR));
 	}
 
-	__RAM_FUNC void waitLastOperation() noexcept {
-		while((FLASH->SR & FLASH_SR_BSY) != 0);
-
-		if ((FLASH->SR & FLASH_SR_EOP) != 0) {
-			FLASH->SR = FLASH_SR_EOP;
-		} // else is ERROR
-	}
-
-	__RAM_FUNC void writeFlashHalfPage(uint32_t addr, uint32_t * data) noexcept {
-		waitLastOperation();
-//		FLASHx->PECR.bit.PROG = 1;
-//		FLASHx->PECR.bit.FPRG = 1;
-		FLASH->PECR |= FLASH_PECR_FPRG | FLASH_PECR_PROG;
-
-		__disable_irq();
-		for (uint8_t i = 0; i < ((/*TBlockSizeNVM*/ 128 / 2) / sizeof(uint32_t)); i++) {
-			*(__IO uint32_t *)(addr) = static_cast<uint32_t>(0 + i)/**data++*/;
-		}
-		__enable_irq();
-
-//		if (!waitFlashBusy()) {
-//			FLASHx->PECR.bit.PROG = 0;
-//			FLASHx->PECR.bit.FPRG = 0;
-//			return;
-//		}
-		waitLastOperation();
-
-//		FLASHx->PECR.bit.PROG = 0;
-//		FLASHx->PECR.bit.FPRG = 0;
-		FLASH->PECR &= ~(FLASH_PECR_FPRG | FLASH_PECR_PROG);
-	}
-
 	void eraseFlashPage(uint32_t pageAddr) noexcept {
 		__waitLastOperation();
 
 		FLASH->PECR |= FLASH_PECR_ERASE | FLASH_PECR_PROG;
-//		FLASHx->PECR.bit.PROG  = 1;
-//		FLASHx->PECR.bit.ERASE = 1;
 
 		__disable_irq();
 		*(__IO uint32_t *)pageAddr = static_cast<uint32_t>(0x0);
 		__enable_irq();
 
-//		if (!waitFlashBusy()) {
-//			FLASHx->PECR.bit.PROG  = 0;
-//			FLASHx->PECR.bit.ERASE = 0;
-//			return;
-//		}
-
 		__waitLastOperation();
-//		while((FLASH->SR & FLASH_SR_BSY) != 0);
-//
-////		if (FLASHx->SR.bit.EOP != 0) {
-////			FLASHx->SR.bit.EOP = 1; // clear by writing 1
-////		}
-//		if ((FLASH->SR & FLASH_SR_EOP) != 0) {
-//			FLASH->SR = FLASH_SR_EOP;
-//		}
-
 		FLASH->PECR &= ~(FLASH_PECR_ERASE | FLASH_PECR_PROG);
-//		FLASHx->PECR.bit.PROG  = 0;
-//		FLASHx->PECR.bit.ERASE = 0;
 	}
 
 protected:
