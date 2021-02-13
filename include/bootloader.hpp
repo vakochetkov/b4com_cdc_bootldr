@@ -108,7 +108,7 @@ public:
 		flash::ReadChunk(0, &data[0], 128);
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
 
-		flash_stm32l0x2_drv.EraseBlockNVM(0x800FED8);
+		flash_stm32l0x2_drv.EraseBlockNVM(0x800FF80);
 		flash::EraseAll(); // tTODO: flash write/erase/read
 		flash::ReadChunk(0, &data[0], 128);
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
@@ -116,8 +116,8 @@ public:
 		data[0] = 0x000000AA;
 		data[2] = 0x0000ABCD;
 		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
-//		flash::WriteChunk(0, &data[0], 128);
-		flash_stm32l0x2_drv.WriteBlockNVM(0x08008000, data, 128);
+		flash::WriteChunk(0, &data[0], 128);
+//		flash_stm32l0x2_drv.WriteBlockNVM(0x08008000, data, 128);
 
 
 		flash::ReadChunk(0, &data[0], 128);
