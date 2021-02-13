@@ -22,8 +22,8 @@ int main() {
 	led::Init();
 	led::SetPython();
 
-	bootloader::Init();
-	bootloader::SelfTest();
+	bootloader::Init(); // if don't need update, jump to user firmware
+//	bootloader::SelfTest();
 
 	cdc::Init(); // TODO: after succesfull check ONLY!
 
@@ -33,18 +33,6 @@ int main() {
 //		auto txlen = cdc::GetTxLen();
 		cdc::Read(buffer, BUFSIZE);
 		bootloader::ProcessNext(buffer, BUFSIZE);
-
-////		cdc::WriteCharNonBlk('0' + i);
-////		cdc::FlushTx();
-		cdc::ReadChar();
-//		sprintf(chs, "\nr:%d t:%d\n", rxlen, txlen);
-//		cdc::WriteBlk(chs, 20);
-		delay_ms(10);
-//
-////		SHTRACE("ch %c", ch);
-//		SHTRACE("TX %lu RX %lu", txlen, rxlen);
-////		delay_ms(500);
-
 	}
 }
 

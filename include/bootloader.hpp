@@ -104,7 +104,8 @@ public:
 		crc32::Init();
 
 		uint32_t word = flash::ReadWordEEPROM();
-		if (word != static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_IS_UPDATED)) {
+		if (word == static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_IS_UPDATED)) {
+			SHTRACE("FW is up to date, jump...");
 			JumpToApp(FIRMWARE_ADDR_START);
 		} else {
 			// need update
@@ -114,12 +115,28 @@ public:
 	static void ProcessNext(char * buf, uint32_t length) noexcept {
 		static char * chptr = NULL;
 		static btldr_state_t state = btldr_state_t::ST_START;
+		static Timeout t;
 
-//		chptr = strstr(buf, );
+		t.Set(30000);
 		switch(state) {
 		case btldr_state_t::ST_START:
+			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_START)]);
+			if (t.IsTimeOut()) {
+				SHTRACE("START timeout");
+				rcc::Reset();
+			}
+			if (chptr != NULL) {
+				SHTRACE("START detected");
+				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)], sizeof btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]);
+				state = btldr_state_t::ST_DEVNAME;
+				t.Clear();
+				t.Set(1000);
+			} else {
+				t.Update();
+			}
 			break;
 		case btldr_state_t::ST_DEVNAME:
+			SHTRACE("ST_DEVNAME");
 			break;
 		case btldr_state_t::ST_PARAMS:
 			break;
