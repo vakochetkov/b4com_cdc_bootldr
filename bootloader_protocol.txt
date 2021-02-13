@@ -33,12 +33,13 @@ Firmware programming sequence:
 
 4. Wait for incoming firmware parameters for 1000ms
    Message format:
-   "BTLDR_" + 'S' + @size + 'A' + @addr + 'C' + @crc + 'B' + @chunk + '\n'
-					32768		  ‭2147486720‬	‭5895513235   256
+   "BTLDR_" + 'S' + @size + 'A' + @addr + 'C' + @crc + 'B' + @chunk + 'N' + @num + '\n'
+					32768		  ‭2147486720‬	‭5895513235   256			123
    @size  - firmware size in bytes, 4 bytes long and aligned
    @addr  - firmware start address in bytes, 4 bytes long and aligned
    @crc   - firmware STM32 format CRC in bytes, 4 bytes long
    @chunk - chunk size in bytes, which will be used for firmware receiption, 4 bytes long and aligned
+   @num   - number of chunks calculated by host, 4 bytes long and aligned
    * If received and all parameters is valid, send "ACK\n"
    * If received message is invalid, send "BAD_PARAMS\n"
    * If size  is invalid, send "BAD_SIZE\n"
@@ -46,6 +47,7 @@ Firmware programming sequence:
    * If crc   is invalid, send "BAD_CRC\n"
    * If chunk size is invalid, send "BAD_CHUNK\n"
    * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n"
+   * If num is not matched with one calculated by device, send "BAD_CHNUM\n"
    * If not "ACK\n" or timeout, do reset
    
 5. Receive and flash N chunks of firmware bytes, timeout is 1000ms

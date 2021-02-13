@@ -18,7 +18,7 @@
 
 #include "flash_drv.hpp"
 
-#define __RAM_FUNC __attribute__ ((section(".ram")))
+#define __RAM_FUNC  __attribute__((section(".RamFunc")))
 
 static constexpr uint32_t FLASH_BLOCK_SIZE  = 128;
 static constexpr uint32_t EEPROM_BLOCK_SIZE = 4;
@@ -152,46 +152,62 @@ class flash_stm32l0x2_drv_c : public flash_drv_c {
 		return ((addr < FLASH_BASE_ADDR_END) && (addr >= FLASH_BASE_ADDR));
 	}
 
+	__RAM_FUNC void waitForOperation() {
+		while((FLASH->SR & FLASH_SR_BSY) != 0);
+	}
+
 	__RAM_FUNC void writeFlashHalfPage(uint32_t addr, uint32_t * data) noexcept {
-		FLASHx->PECR.bit.PROG = 1;
-		FLASHx->PECR.bit.FPRG = 1;
+//		FLASHx->PECR.bit.PROG = 1;
+//		FLASHx->PECR.bit.FPRG = 1;
+		FLASH->PECR |= FLASH_PECR_FPRG | FLASH_PECR_PROG;
 
-		for (uint8_t i = 0; i < ((TBlockSizeNVM / 2) / sizeof(uint32_t)); i++) {
-			*(__IO uint32_t *)(addr) = *data++;
+		for (uint8_t i = 0; i < ((/*TBlockSizeNVM*/ 128 / 2) / sizeof(uint32_t)); i++) {
+			*(__IO uint32_t *)(addr) = static_cast<uint32_t>(0 + i)/**data++*/;
 		}
 
-		if (!waitFlashBusy()) {
-			FLASHx->PECR.bit.PROG = 0;
-			FLASHx->PECR.bit.FPRG = 0;
-			return;
-		}
+//		if (!waitFlashBusy()) {
+//			FLASHx->PECR.bit.PROG = 0;
+//			FLASHx->PECR.bit.FPRG = 0;
+//			return;
+//		}
+		while((FLASH->SR & FLASH_SR_BSY) != 0);
 
-		if (FLASHx->SR.bit.EOP != 0) {
-			FLASHx->SR.bit.EOP = 1; // clear by writing 1
-		}
+//		if (FLASHx->SR.bit.EOP != 0) {
+//			FLASHx->SR.bit.EOP = 1; // clear by writing 1
+//		}
+		if ((FLASH->SR & FLASH_SR_EOP) != 0) {
+			FLASH->SR = FLASH_SR_EOP;
+		} // else is ERROR
 
-		FLASHx->PECR.bit.PROG = 0;
-		FLASHx->PECR.bit.FPRG = 0;
+//		FLASHx->PECR.bit.PROG = 0;
+//		FLASHx->PECR.bit.FPRG = 0;
+		FLASH->PECR &= ~(FLASH_PECR_FPRG | FLASH_PECR_PROG);
 	}
 
 	__RAM_FUNC void eraseFlashPage(uint32_t pageAddr) noexcept {
-		FLASHx->PECR.bit.PROG  = 1;
-		FLASHx->PECR.bit.ERASE = 1;
+		FLASH->PECR |= FLASH_PECR_ERASE | FLASH_PECR_PROG;
+//		FLASHx->PECR.bit.PROG  = 1;
+//		FLASHx->PECR.bit.ERASE = 1;
 
 		*(__IO uint32_t *)pageAddr = static_cast<uint32_t>(0);
 
-		if (!waitFlashBusy()) {
-			FLASHx->PECR.bit.PROG  = 0;
-			FLASHx->PECR.bit.ERASE = 0;
-			return;
+//		if (!waitFlashBusy()) {
+//			FLASHx->PECR.bit.PROG  = 0;
+//			FLASHx->PECR.bit.ERASE = 0;
+//			return;
+//		}
+		while((FLASH->SR & FLASH_SR_BSY) != 0);
+
+//		if (FLASHx->SR.bit.EOP != 0) {
+//			FLASHx->SR.bit.EOP = 1; // clear by writing 1
+//		}
+		if ((FLASH->SR & FLASH_SR_EOP) != 0) {
+			FLASH->SR = FLASH_SR_EOP;
 		}
 
-		if (FLASHx->SR.bit.EOP != 0) {
-			FLASHx->SR.bit.EOP = 1; // clear by writing 1
-		}
-
-		FLASHx->PECR.bit.PROG  = 0;
-		FLASHx->PECR.bit.ERASE = 0;
+		FLASH->PECR &= ~(FLASH_PECR_ERASE | FLASH_PECR_PROG);
+//		FLASHx->PECR.bit.PROG  = 0;
+//		FLASHx->PECR.bit.ERASE = 0;
 	}
 
 protected:
@@ -328,7 +344,7 @@ public:
 		}
 
 		for (uint32_t i = 0; i < (TBlockSizeNVM / sizeof(uint32_t)); i++) {
-			buffer[i * sizeof(uint32_t)] = *(__IO uint32_t*)(addr + i * sizeof(uint32_t));
+			buffer[i] = *(__IO uint32_t*)(addr + (i * sizeof(uint32_t)));
 		}
 	}
 

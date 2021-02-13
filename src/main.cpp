@@ -22,7 +22,7 @@ int main() {
 	bootloader::Init();
 
 	bootloader::SelfTest();
-	while(1);
+
 
 	cdc::Init(); // TODO: after succesfull check ONLY!
 

@@ -24,8 +24,8 @@ class flash_c {
 public:
 	static void Init() noexcept {
 		TDriver->Init();
-		TDriver->UnlockNVM();
 		TDriver->UnlockEEPROM();
+		TDriver->UnlockNVM();
 	}
 
 	static inline size_t GetBlockSize() {
@@ -36,6 +36,8 @@ public:
 		if (length != TWriteBlockSize) {
 			return;
 		}
+		TDriver->UnlockEEPROM();
+		TDriver->UnlockNVM();
 		TDriver->WriteBlockNVM(FIRMWARE_ADDR_START + (chunkNumber * 128), data, 128 / sizeof(uint32_t));
 	}
 
@@ -47,13 +49,16 @@ public:
 	}
 
 	static void EraseAll() noexcept {
-		for (uint32_t addr = FIRMWARE_ADDR_START; addr < (FIRMWARE_MAX_SIZE / 128); addr += 128) {
+		TDriver->UnlockEEPROM();
+		TDriver->UnlockNVM();
+		for (uint32_t addr = FIRMWARE_ADDR_START; addr < (FIRMWARE_ADDR_START + FIRMWARE_MAX_SIZE); addr += 128) {
 			TDriver->EraseBlockNVM(addr);
 		}
 	}
 
 	// relative addr, not absolute
 	static inline void WriteWordEEPROM(uint32_t word) noexcept {
+		TDriver->UnlockEEPROM();
 		TDriver->WriteBlockEEPROM(EEPROM_BASE_ADDR + MAGICWORD_ADDR_OFFSET, &word, 1);
 	}
 

@@ -36,9 +36,11 @@ typedef union {
 		uint32_t crc;
 		char b;
 		uint32_t chunk;
+		char n;
+		uint32_t num;
 	} __attribute__((__packed__));
 
-	uint8_t data[1 + 4 + 1 + 4 + 1 + 4 + 1 + 4];
+	uint8_t data[1 + 4 + 1 + 4 + 1 + 4 + 1 + 4 + 1 + 4];
 } btldr_params_t;
 
 typedef union {
@@ -70,6 +72,7 @@ class bootloader_c {
 		RSPD_BAD_CRC,
 		RSPD_BAD_CHUNK,
 		RSPD_BAD_CHSZ_RATIO,
+		RSPD_BAD_CHNUM,
 		// FLASH stage
 		RSPD_BAD_FW_CHUNK,
 		RSPD_BAD_FW_CHUNKNUM,
@@ -92,14 +95,36 @@ public:
 	}
 
 	static void SelfTest() noexcept {
-		uint32_t word = flash::ReadWordEEPROM();
-		SHTRACE("#1 Read MW: %#010x", word);
+		static uint32_t data[32] = {0};
 
-		flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_NEED_UPDATE));
-		word = flash::ReadWordEEPROM();
-		SHTRACE("#2 Read MW: %#010x", word);
+//		uint32_t word = flash::ReadWordEEPROM();
+//		SHTRACE("#1 Read MW: %#010x", word);
+//
+//		flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_ZERO));
+//		word = flash::ReadWordEEPROM();
+//		SHTRACE("#2 Read MW: %#010x", word);
 
-//		flash::EraseAll(); // TODO: flash write/erase/read
+		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+		flash::ReadChunk(0, &data[0], 128);
+		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+
+		flash_stm32l0x2_drv.EraseBlockNVM(0x800FED8);
+		flash::EraseAll(); // tTODO: flash write/erase/read
+		flash::ReadChunk(0, &data[0], 128);
+		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+
+		data[0] = 0x000000AA;
+		data[2] = 0x0000ABCD;
+		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+//		flash::WriteChunk(0, &data[0], 128);
+		flash_stm32l0x2_drv.WriteBlockNVM(0x08008000, data, 128);
+
+
+		flash::ReadChunk(0, &data[0], 128);
+		SHTRACE("\r\n %#010x %#010x %#010x \r\n", data[0], data[1], data[2]);
+
+		SHTRACE("Self-Test finished!");
+		while(1);
 	}
 };
 
@@ -120,6 +145,7 @@ const char * bootloader_c<TBlockSize>::btldr_respond_msg[] = {
 	"BTLDR_BAD_CRC\n",
 	"BTLDR_BAD_CHUNK\n",
 	"BTLDR_BAD_CHSZ_RATIO\n",
+	"BTLDR_BAD_CHNUM\n",
 	"BTLDR_BAD_FW_CHUNK\n",
 	"BTLDR_BAD_BAD_FW_CHUNKNUM\n",
 	"BTLDR_BAD_FLASH_CMD\n",
