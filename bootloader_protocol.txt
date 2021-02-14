@@ -46,7 +46,7 @@ Firmware programming sequence:
    * If addr  is invalid, send "BAD_ADDR\n"
    * If crc   is invalid, send "BAD_CRC\n"
    * If chunk size is invalid, send "BAD_CHUNK\n"
-   * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n"
+   * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n" NB: not used, reserved
    * If num is not matched with one calculated by device, send "BAD_CHNUM\n"
    * If not "ACK\n" or timeout, do reset
    

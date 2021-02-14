@@ -149,7 +149,8 @@ crc = crcinst.final().to_bytes(4, byteorder='little')
 chunk = int(128).to_bytes(4, byteorder='little')
 num = (int(inhex.usedsize() / 128) + (inhex.usedsize() % 128 > 0)).to_bytes(4, byteorder='little')
 
-param = b'abcd_ 1_2 BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
+# add some garbage to check fragmented logic
+param = b'abcd_ 1_2________________________________________________ BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
 print('size: {:d} addr: 0x{:08X} crc: 0x{:08X} chunk: {:d} num: {:d}'.format( 
         int.from_bytes(size, byteorder='little'),int.from_bytes(addr, byteorder='little'),int.from_bytes(crc, byteorder='little'),  
         int.from_bytes(chunk, byteorder='little'),int.from_bytes(num, byteorder='little')))     

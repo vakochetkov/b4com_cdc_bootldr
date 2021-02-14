@@ -30,7 +30,7 @@ enum class btldr_magic_word_t : uint32_t {
 };
 
 typedef union {
-	struct fields {
+	struct {
 		char s;
 		uint32_t size;
 		char a;
@@ -41,18 +41,18 @@ typedef union {
 		uint32_t chunk;
 		char n;
 		uint32_t num;
-	} __attribute__((__packed__));
+	} __attribute__((__packed__)) fields;
 
 	uint8_t data[1 + 4 + 1 + 4 + 1 + 4 + 1 + 4 + 1 + 4];
 } btldr_params_t;
 
 typedef union {
-	struct fields {
+	struct {
 		char b;
 		uint32_t block_number;
 		char d;
 		uint8_t data_block[CHUNK_SIZE];
-	} __attribute__((__packed__));
+	} __attribute__((__packed__)) fields;
 
 	uint8_t data[1 + 4 + 1 + CHUNK_SIZE];
 } btldr_chunk_t;
@@ -69,6 +69,11 @@ class bootloader_c {
 		ST_CHECK,
 		ST_FINISH
 	};
+	enum class parser_state_t : uint8_t {
+		ST_IDLE = 0,
+		ST_HOOKED,
+		ST_COMPLETE
+	};
 	enum class btldr_msg_t : uint8_t {
 		MSG_START   = 0,
 		MSG_DEVNAME,
@@ -83,7 +88,7 @@ class bootloader_c {
 		RSPD_BAD_ADDR,
 		RSPD_BAD_CRC,
 		RSPD_BAD_CHUNK,
-		RSPD_BAD_CHSZ_RATIO,
+//		RSPD_BAD_CHSZ_RATIO,
 		RSPD_BAD_CHNUM,
 		// FLASH stage
 		RSPD_BAD_FW_CHUNK,
@@ -100,13 +105,122 @@ class bootloader_c {
 	static btldr_params_t params;
 	static btldr_chunk_t  fwblock;
 
-	static inline void DeInitAndReset() noexcept {
+	static inline void disconnectAndReset() noexcept {
+		delay_ms(100);
 //		cdc::DeInit(); // xXX: debug
 		rcc::Reset();
 	}
 
+	static void __printParams() noexcept {
+		SHTRACE("%c %lu", params.fields.s, params.fields.size);
+		SHTRACE("%c %#010x", params.fields.a, params.fields.addr);
+		SHTRACE("%c %#010x", params.fields.c, params.fields.crc);
+		SHTRACE("%c %lu", params.fields.b, params.fields.chunk);
+		SHTRACE("%c %lu", params.fields.n, params.fields.num);
+	}
+
+	static inline uint32_t calcChunkNumber() noexcept {
+		return ((params.fields.size / params.fields.chunk) + (params.fields.size % params.fields.chunk > 0));
+	}
+
+	// current limitations: fixed start addr, fixed chunk size
+	static void validateParams() noexcept {
+		auto result = btldr_respond_t::RSPD_ACK;
+
+		// errors fallthrough, firstly send last error
+		if (params.fields.s != 'S') {
+			SHTRACE("S invalid: %c", params.fields.s);
+			result = btldr_respond_t::RSPD_BAD_PARAMS;
+		}
+		if (params.fields.size > FIRMWARE_MAX_SIZE) {
+			SHTRACE("SIZE invalid: %lu", params.fields.size);
+			result = btldr_respond_t::RSPD_BAD_SIZE;
+		}
+		if (params.fields.a != 'A') {
+			SHTRACE("A invalid: %c", params.fields.a);
+			result = btldr_respond_t::RSPD_BAD_PARAMS;
+		}
+		if (params.fields.addr != FIRMWARE_ADDR_START) {
+			SHTRACE("ADDR invalid: %#010x", params.fields.a);
+			result = btldr_respond_t::RSPD_BAD_ADDR;
+		}
+		if (params.fields.c != 'C') {
+			SHTRACE("C invalid: %c", params.fields.c);
+			result = btldr_respond_t::RSPD_BAD_PARAMS;
+		}
+		if (params.fields.crc == 0) {
+			SHTRACE("CRC invalid: %#010x", params.fields.crc);
+			result = btldr_respond_t::RSPD_BAD_CRC;
+		}
+		if (params.fields.b != 'B') {
+			SHTRACE("B invalid: %c", params.fields.b);
+			result = btldr_respond_t::RSPD_BAD_PARAMS;
+		}
+		if (params.fields.chunk != TBlockSize) {
+			SHTRACE("CHUNK invalid: %lu", params.fields.chunk);
+			result = btldr_respond_t::RSPD_BAD_CHUNK;
+		}
+		if (params.fields.n != 'N') {
+			SHTRACE("N invalid: %c", params.fields.n);
+			result = btldr_respond_t::RSPD_BAD_PARAMS;
+		}
+		if (params.fields.num != calcChunkNumber()) {
+			SHTRACE("NUM invalid: %lu vs %lu", params.fields.num, calcChunkNumber());
+			result = btldr_respond_t::RSPD_BAD_CHNUM;
+		}
+
+		cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(result)],
+						strlen(btldr_respond_msg[static_cast<uint8_t>(result)]));
+		if (result != btldr_respond_t::RSPD_ACK) {
+			disconnectAndReset();
+		}
+	}
+
 	static bool parseParams(char * buf, uint32_t length) noexcept {
-		return 1;
+		static parser_state_t state = parser_state_t::ST_IDLE;
+		static uint32_t remain = 0;
+		bool result = false;
+		char * chptr = NULL;
+
+		switch(state) {
+		case parser_state_t::ST_IDLE:
+			chptr = strstr(buf, PREFIX);
+
+			if (chptr != NULL) {
+				remain = length - (chptr - buf) - strlen(PREFIX);
+
+				if (remain < sizeof(params)) {
+					SHTRACE("params fragmented!");
+					memcpy(&params.data[0], (chptr + strlen(PREFIX)), remain);
+					remain = sizeof(params) - remain;
+					state = parser_state_t::ST_HOOKED;
+				} else {
+					SHTRACE("params received");
+					memcpy(&params.data[0], (chptr + strlen(PREFIX)), sizeof(params));
+					state = parser_state_t::ST_COMPLETE;
+				}
+			}
+			break;
+
+		case parser_state_t::ST_HOOKED: // append params if message was fragmented
+			if (remain <= length) {
+				memcpy(&params.data[sizeof(params) - remain], &buf[0], remain);
+				state = parser_state_t::ST_COMPLETE;
+			} else {
+				memcpy(&params.data[sizeof(params) - remain], &buf[0], length);
+				remain = remain - length;
+			}
+			break;
+
+		case parser_state_t::ST_COMPLETE:
+//			__printParams();
+			validateParams();
+			result = true;
+			break;
+
+		default: SHTRACE("parser error!"); disconnectAndReset();
+		}
+		return result;
 	}
 
 public:
@@ -140,7 +254,7 @@ public:
 			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_START)]);
 			if (t.IsTimeOut()) {
 				SHTRACE("START timeout");
-				DeInitAndReset();
+				disconnectAndReset();
 			}
 			if (chptr != NULL) {
 				SHTRACE("START detected");
@@ -156,18 +270,26 @@ public:
 
 		case btldr_state_t::ST_DEVNAME:
 			led::Set(2,1);
-			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_DEVNAME)]);
+			chptr = strstr(buf, PREFIX);
 			if (t.IsTimeOut()) {
 				SHTRACE("DEVNAME timeout");
-				DeInitAndReset();
+				disconnectAndReset();
 			}
 			if (chptr != NULL) {
-				SHTRACE("DEVNAME detected");
-				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
-								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
-				state = btldr_state_t::ST_PARAMS;
-				t.Clear();
-				t.Set(2000);
+				chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_DEVNAME)]);
+				if (chptr != NULL) {
+					SHTRACE("DEVNAME detected");
+					cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
+							strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
+					state = btldr_state_t::ST_PARAMS;
+					t.Clear();
+					t.Set(2000);
+				} else {
+					SHTRACE("invalid DEVNAME detected");
+					cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_DEVNAME)],
+									strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_DEVNAME)]));
+					disconnectAndReset();
+				}
 			} else {
 				t.Update();
 			}
@@ -179,7 +301,7 @@ public:
 
 			if (t.IsTimeOut()) {
 				SHTRACE("PARAMS timeout");
-				DeInitAndReset();
+				disconnectAndReset();
 			}
 
 			if (parseParams(buf, length)) {
@@ -190,18 +312,7 @@ public:
 			} else {
 				t.Update();
 			}
-			if (chptr != NULL) {
-				auto remainLen = length - (chptr - buf) - strlen(PREFIX);
-				SHTRACE("PARAMS detected");
-				SHTRACE("%s", chptr + strlen(PREFIX));
-				SHTRACE("remain: %lu", remainLen);
-				if (parseParams(chptr + strlen(PREFIX), remainLen)) {
-					SHTRACE("test");
-					__BKPT(2);
-				}
-			} else {
-				t.Update();
-			}
+
 			break;
 
 		case btldr_state_t::ST_FLASH:
@@ -209,7 +320,7 @@ public:
 			__BKPT(2);
 			break;
 
-		default: DeInitAndReset();
+		default: disconnectAndReset();
 		}
 
 	}
@@ -270,7 +381,7 @@ const char * bootloader_c<TBlockSize>::btldr_respond_msg[] = {
 	"BTLDR_BAD_ADDR\n",
 	"BTLDR_BAD_CRC\n",
 	"BTLDR_BAD_CHUNK\n",
-	"BTLDR_BAD_CHSZ_RATIO\n",
+//	"BTLDR_BAD_CHSZ_RATIO\n",
 	"BTLDR_BAD_CHNUM\n",
 	"BTLDR_BAD_FW_CHUNK\n",
 	"BTLDR_BAD_BAD_FW_CHUNKNUM\n",
