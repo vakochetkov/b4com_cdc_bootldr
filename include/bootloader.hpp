@@ -100,7 +100,12 @@ class bootloader_c {
 	static btldr_params_t params;
 	static btldr_chunk_t  fwblock;
 
-	static bool isParamsValid() noexcept {
+	static inline void DeInitAndReset() noexcept {
+//		cdc::DeInit(); // xXX: debug
+		rcc::Reset();
+	}
+
+	static bool parseParams(char * buf, uint32_t length) noexcept {
 		return 1;
 	}
 
@@ -135,7 +140,7 @@ public:
 			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_START)]);
 			if (t.IsTimeOut()) {
 				SHTRACE("START timeout");
-				rcc::Reset();
+				DeInitAndReset();
 			}
 			if (chptr != NULL) {
 				SHTRACE("START detected");
@@ -143,7 +148,7 @@ public:
 								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
 				state = btldr_state_t::ST_DEVNAME;
 				t.Clear();
-				t.Set(1000);
+				t.Set(2000);
 			} else {
 				t.Update();
 			}
@@ -154,16 +159,15 @@ public:
 			chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_DEVNAME)]);
 			if (t.IsTimeOut()) {
 				SHTRACE("DEVNAME timeout");
-				rcc::Reset();
+				DeInitAndReset();
 			}
 			if (chptr != NULL) {
 				SHTRACE("DEVNAME detected");
 				cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
 								strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
 				state = btldr_state_t::ST_PARAMS;
-				SHTRACE("----");
 				t.Clear();
-				t.Set(1000);
+				t.Set(2000);
 			} else {
 				t.Update();
 			}
@@ -171,24 +175,41 @@ public:
 
 		case btldr_state_t::ST_PARAMS:
 			led::Set(3,1);
-			chptr = strstr(buf, PREFIX);
+//			chptr = strstr(buf, PREFIX);
+
 			if (t.IsTimeOut()) {
 				SHTRACE("PARAMS timeout");
-				rcc::Reset();
+				DeInitAndReset();
+			}
+
+			if (parseParams(buf, length)) {
+				SHTRACE("PARAMS parsed");
+				state = btldr_state_t::ST_FLASH;
+				t.Clear();
+				t.Set(2000);
+			} else {
+				t.Update();
 			}
 			if (chptr != NULL) {
+				auto remainLen = length - (chptr - buf) - strlen(PREFIX);
 				SHTRACE("PARAMS detected");
 				SHTRACE("%s", chptr + strlen(PREFIX));
-				__BKPT(2);
+				SHTRACE("remain: %lu", remainLen);
+				if (parseParams(chptr + strlen(PREFIX), remainLen)) {
+					SHTRACE("test");
+					__BKPT(2);
+				}
 			} else {
 				t.Update();
 			}
 			break;
 
 		case btldr_state_t::ST_FLASH:
+			SHTRACE("ST_FLASH");
+			__BKPT(2);
 			break;
 
-		default: rcc::Reset();
+		default: DeInitAndReset();
 		}
 
 	}

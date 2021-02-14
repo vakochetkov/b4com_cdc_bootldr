@@ -90,7 +90,7 @@ ihexdict = inhex.todict()
 timeout = Timeout()
 serial = serial.Serial(
                         port=PORT,
-                        baudrate=250000,
+                        baudrate=500000,
                         parity=serial.PARITY_NONE,
                         stopbits=serial.STOPBITS_ONE,
                         bytesize=serial.EIGHTBITS,
@@ -99,7 +99,7 @@ serial = serial.Serial(
                         )
 
 # stage 1
-print('START stage')
+print('> START stage')
 serial.write(b'BTLDR_START\n')
 
 timeout.set(2000)
@@ -119,7 +119,7 @@ else:
     # sys.exit(1)
 
 # stage 2
-print('DEVNAME stage')
+print('> DEVNAME stage')
 serial.write(b'BTLDR_B4COM_OUTLET_V2\n')
 
 timeout.set(2000)
@@ -138,7 +138,7 @@ else:
     # sys.exit(1)
 
 # stage 3
-print('FWPARAM stage')
+print('> FWPARAM stage')
 size = inhex.usedsize().to_bytes(4, byteorder='little')
 addr = int(EXEC_OFFSET, 0).to_bytes(4, byteorder='little')
 data = list(inhex.todict().values())
@@ -149,7 +149,7 @@ crc = crcinst.final().to_bytes(4, byteorder='little')
 chunk = int(128).to_bytes(4, byteorder='little')
 num = (int(inhex.usedsize() / 128) + (inhex.usedsize() % 128 > 0)).to_bytes(4, byteorder='little')
 
-param = b'BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
+param = b'abcd_ 1_2 BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
 print('size: {:d} addr: 0x{:08X} crc: 0x{:08X} chunk: {:d} num: {:d}'.format( 
         int.from_bytes(size, byteorder='little'),int.from_bytes(addr, byteorder='little'),int.from_bytes(crc, byteorder='little'),  
         int.from_bytes(chunk, byteorder='little'),int.from_bytes(num, byteorder='little')))     

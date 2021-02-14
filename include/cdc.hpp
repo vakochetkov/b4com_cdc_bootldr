@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <cstring>
 #include "stm32l0xx_common.hpp"
+#include "rcc.hpp"
+#include "ringbuffer.hpp"
 
 extern "C" {
 #include "usb.h"
@@ -174,22 +176,17 @@ static struct usb_cdc_line_coding cdc_line = {
 
 constexpr uint32_t USB_BUF_SIZE = 512; // 8 * CDC_DATA_SZ
 
-class usb_cdc_c {
-	static uint8_t    txbuf[USB_BUF_SIZE];	// tx user "hot" buffer, any size > CDC_DATA_SZ
-	static volatile int32_t    txpos;		// current txbuf length indicator
-	static uint8_t    rxbuf[USB_BUF_SIZE];	// rx user "hot" buffer, multiple of CDC_DATA_SZ(0x40)
-	static volatile int32_t    rxpos;		// current rxbuf length indicator
+extern jnk0le::Ringbuffer<char, USB_BUF_SIZE> rxbuf;
+extern jnk0le::Ringbuffer<char, USB_BUF_SIZE> txbuf;
 
-	static inline void flushBuffer(uint8_t * buf, uint32_t len) {
-		for (uint32_t i = 0; i < len; i++) {
-			buf[i] = 0;
-		}
+class usb_cdc_c {
+
+	static inline void flushTxBuffer() {
+		txbuf.consumerClear();
 	}
 
-	static inline void flushBuffer(volatile uint8_t * buf, uint32_t len) {
-		for (uint32_t i = 0; i < len; i++) {
-			buf[i] = 0;
-		}
+	static inline void flushRxBuffer() {
+		rxbuf.producerClear();
 	}
 
 	static usbd_respond SetConfig(usbd_device *dev, uint8_t cfg) noexcept {
@@ -284,39 +281,36 @@ class usb_cdc_c {
 
 	/**
 	 * Write new data to IN EP (if txbuf not empty)
-	 * 1. Trying write block from txbuf sizeof blen
-	 * 2. Decrease txpos by real xfered length - rlen
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
 	 * @param ep    - triggered TX EP
 	 */
 	static void HandleWrite(usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
-		int32_t rlen;
-		if (txpos > 0) {
-			auto blen =  (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ;
-			rlen = usbd_ep_write(dev, ep, &txbuf[txpos - blen - 1], blen);
-			if (rlen > 0) {
-				txpos = txpos - rlen; 
-			} 
+		static char tmpbuf[CDC_DATA_SZ] = {0};
+		auto freeLen = txbuf.readAvailable();
+
+		if (freeLen) {
+			auto blen =  (freeLen < CDC_DATA_SZ) ? freeLen : CDC_DATA_SZ;
+			txbuf.readBuff(&tmpbuf[0], blen);
+			usbd_ep_write(dev, ep, &tmpbuf[0], blen);
 		}
 	}
 
 	/**
 	 * Read new data from OUT EP (if there is enough space in rxbuf)
-	 * 1. If there are block sizeof CDC_DATA_SZ in rxbuf, trying to read to it
-	 * 2. Increase rxpos by real read length - rlen
 	 * @param dev   - UDEV structure
 	 * @param event - polled USB event
 	 * @param ep    - triggered RX EP
 	 */
 	static void HandleRead (usbd_device *dev, uint8_t event, uint8_t ep) noexcept {
+		static char tmpbuf[CDC_DATA_SZ] = {0};
 		int32_t rlen;
-		if (rxpos < USB_BUF_SIZE) {
-			auto blen =  ((USB_BUF_SIZE - rxpos) < CDC_DATA_SZ) ? (USB_BUF_SIZE - rxpos) : CDC_DATA_SZ;
+		auto freeLen = rxbuf.writeAvailable();
 
-			rlen = usbd_ep_read(dev, ep, &rxbuf[rxpos], blen);
-			if (rlen > 0 && rlen <= blen) {
-				rxpos = rxpos + rlen; // possible overflow???
+		if (freeLen) {
+			rlen = usbd_ep_read(dev, ep, &tmpbuf[0], (freeLen < CDC_DATA_SZ) ? freeLen : CDC_DATA_SZ);
+			if (rlen > 0) {
+				rxbuf.writeBuff(&tmpbuf[0], rlen);
 			}
 		}
 	}
@@ -331,10 +325,6 @@ class usb_cdc_c {
 
 public:
 	static void Init() noexcept {
-		txpos = 0;
-		rxpos = 0;
-		flushBuffer(txbuf, USB_BUF_SIZE);
-		flushBuffer(rxbuf, USB_BUF_SIZE);
 
 		usbd_init(&usb_udev, &usbd_hw, CDC_EP0_SIZE, usb_ubuf, sizeof(usb_ubuf));
 		usbd_reg_config(&usb_udev,  usb_cdc_c::SetConfig);
@@ -347,11 +337,13 @@ public:
 		usbd_connect(&usb_udev, true);
 	}
 
+	static void DeInit() noexcept {
+		usbd_connect(&usb_udev, false);
+		usbd_enable(&usb_udev, false);
+	}
+
 	static void WriteCharNonBlk(char ch) noexcept {
-		if (txpos < USB_BUF_SIZE) {
-			txbuf[txpos] = static_cast<uint8_t>(ch);
-			txpos++;
-		} 
+		txbuf.insert(ch);
 	}
 
 	static void WriteNonBlk(const char * msg, uint32_t length) noexcept {
@@ -361,19 +353,16 @@ public:
 		if (!length) {
 			return;
 		}
-		if (length > (USB_BUF_SIZE - txpos)) {
+		if (length > txbuf.writeAvailable()) {
 			return;
 		}
 
-		for (uint32_t i = 0; i < length; i++) {
-			txbuf[txpos] = static_cast<uint8_t>(msg[i]);
-			txpos++;
-		}
+		txbuf.writeBuff(msg, length);
 	}
 
 	static inline void WriteCharBlk(char ch) {
 		WriteCharNonBlk(ch);
-		FlushChar();
+		FlushTx();
 	}
 
 	static void inline WriteBlk(const char * msg, uint32_t length) noexcept {
@@ -382,45 +371,17 @@ public:
 	}
 
 	/**
-	 * Push one char from TX FIFO to TX endpoint
-	 */
-	static void FlushChar() {
-		int32_t rlen  = 0;
-
-		if (txpos <= 0) {
-			return;
-		} else {
-			rlen = usbd_ep_write(&usb_udev, CDC_TXD_EP, &txbuf[0], 1);
-			if (rlen > 0) {
-				txpos--;
-				memmove(&txbuf[0], &txbuf[1], txpos);
-			} else {
-				return;
-			}
-		}
-	}
-
-	/**
 	 * Push TX FIFO to TX endpoint in chunks of CDC_DATA_SZ or less
 	 */
 	static void FlushTx() {
-		int32_t rlen  = 0;
-		int32_t txlen = 0;
-		uint8_t * p = &txbuf[0];
+		static char tmpbuf[CDC_DATA_SZ] = {0};
+		auto freeLen = txbuf.readAvailable();
 
-		if (txpos <= 0) {
-			return;
-		} else {
-			while(txpos > 0) {
-				txlen = (txpos < CDC_DATA_SZ) ? txpos : CDC_DATA_SZ;
-				rlen = usbd_ep_write(&usb_udev, CDC_TXD_EP, p, txlen);
-				if (rlen > 0) {
-					txpos -= rlen;
-					p += rlen;
-				} else {
-					return;
-				}
-			}
+		while (freeLen) {
+			txbuf.readBuff(&tmpbuf[0], (freeLen < CDC_DATA_SZ) ? freeLen : CDC_DATA_SZ);
+			usbd_ep_write(&usb_udev, CDC_TXD_EP, &tmpbuf[0], (freeLen < CDC_DATA_SZ) ? freeLen : CDC_DATA_SZ);
+			freeLen = txbuf.readAvailable();
+			delay_ms(5); // litlle delay to avoid IRQ overflood
 		}
 	}
 
@@ -435,44 +396,18 @@ public:
 			return;
 		}
 
-		int32_t freeLen = USB_BUF_SIZE - length;
-		for (uint32_t i = 0; i < length; i++) {
-			msg[i] = static_cast<char>(rxbuf[i]);
-		}
-		if (freeLen > 0) {
-			memmove(&rxbuf[0], &rxbuf[rxpos], USB_BUF_SIZE - rxpos);
-			rxpos = (rxpos < length) ? 0 : (rxpos - length);
-		} else {
-			rxpos = 0;
-		}
+		auto available = rxbuf.readAvailable();
+		rxbuf.readBuff(&msg[0], (available < length) ? available : length);
 	}
 
 	static char ReadChar() noexcept { //FIXME: что-то тут не так
 		char tmp;
-		if (rxpos < 1) {
+		if (rxbuf.readAvailable() == 0) {
 			return 0;
 		}
 
-		tmp = static_cast<char>(rxbuf[0]);
-		rxpos--;
-		memmove(&rxbuf[0], &rxbuf[1], rxpos);
+		rxbuf.remove(&tmp);
 		return tmp;
-	}
-
-	static inline volatile uint8_t * GetRxBuf() noexcept {
-		return &rxbuf[0];
-	}
-
-	static inline int32_t GetRxLen() noexcept {
-		return rxpos;
-	}
-
-	static inline volatile uint8_t * GetTxBuf() noexcept {
-		return &txbuf[0];
-	}
-
-	static inline int32_t GetTxLen() noexcept {
-		return txpos;
 	}
 };
 

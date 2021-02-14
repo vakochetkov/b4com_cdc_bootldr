@@ -26,12 +26,12 @@ Firmware programming sequence:
    * If received, send "ACK\n"
    * If not "ACK\n" or timeout, do reset
    
-3. Wait for device name for 1000ms, for example "BTLDR_SMART_DOOR_V2\n" 
+3. Wait for device name for 2000ms, for example "BTLDR_SMART_DOOR_V2\n" 
    * If received and match, send "ACK\n"
    * If mismatched with internal value, send "BAD_DEVNAME\n" and do reset
    * If not "ACK\n" or timeout, do reset
 
-4. Wait for incoming firmware parameters for 1000ms
+4. Wait for incoming firmware parameters for 2000ms
    Message format:
    "BTLDR_" + 'S' + @size + 'A' + @addr + 'C' + @crc + 'B' + @chunk + 'N' + @num + '\n'
 					32768		  ‭2147486720‬	‭5895513235   256			123
@@ -50,7 +50,7 @@ Firmware programming sequence:
    * If num is not matched with one calculated by device, send "BAD_CHNUM\n"
    * If not "ACK\n" or timeout, do reset
    
-5. Receive and flash N chunks of firmware bytes, timeout is 1000ms
+5. Receive and flash N chunks of firmware bytes, timeout is 2000ms
    Message format:
    "BTLDR_" + 'B' + @chunk_number + 'D' + @chunk_data
    @chunk_number  - current chunk number starting from 0, 4 bytes long
@@ -60,7 +60,7 @@ Firmware programming sequence:
    * If received chunk number is invalid, send "BAD_FW_CHUNKNUM\n"
    * If not "ACK\n" or timeout, do reset
 
-6. Wait for "BTLDR_CHECK", timeout is 1000ms
+6. Wait for "BTLDR_CHECK", timeout is 2000ms
    * If firmware is successfully flashed, send "ACK\n", set "magic" word FLASH_IS_UPDATED and execute user FW
    * If received message is invalid, send "BAD_FLASH_CMD\n"
    * If firmware read is failed, send "BAD_FLASH_READ\n"

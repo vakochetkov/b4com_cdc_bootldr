@@ -25,20 +25,28 @@ int main() {
 	bootloader::Init(); // if don't need update, jump to user firmware
 //	bootloader::SelfTest();
 
-	cdc::Init(); // TODO: after succesfull check ONLY!
+	cdc::Init();
 
 
 	while(1) {
-//		volatile auto rxlen = cdc::GetRxLen();
-//		auto txlen = cdc::GetTxLen();
 
-//		while(1) {
+//		while(1) { // tx test
 //			cdc::WriteBlk("BTLDR_ACK\n",10);
-//			delay_ms(500);
+//			delay_ms(10);
 //		}
 
+//		char ch = '@'; // rx echo test
+//		while(1) {
+//			ch = cdc::ReadChar();
+//			if (ch != 0)
+//				cdc::WriteCharBlk(ch);
+//		}
+		memset(buffer, 0, BUFSIZE); // del old message if any
 		cdc::Read(buffer, BUFSIZE);
 		bootloader::ProcessNext(buffer, BUFSIZE);
+
+//		SHTRACE("%s", buffer);
+//		delay_ms(100);
 	}
 }
 

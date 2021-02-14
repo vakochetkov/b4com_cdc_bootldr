@@ -7,10 +7,6 @@
 
 #include "cdc.hpp"
 
-uint8_t usb_cdc_c::txbuf[USB_BUF_SIZE];
-int32_t volatile usb_cdc_c::txpos;
-uint8_t usb_cdc_c::rxbuf[USB_BUF_SIZE];
-int32_t volatile usb_cdc_c::rxpos;
 
 extern "C" {
 
@@ -21,4 +17,7 @@ void USB_IRQHandler(void) {
 	usbd_poll(&usb_udev);
 }
 }
+
+jnk0le::Ringbuffer<char, USB_BUF_SIZE> rxbuf;
+jnk0le::Ringbuffer<char, USB_BUF_SIZE> txbuf;
 
