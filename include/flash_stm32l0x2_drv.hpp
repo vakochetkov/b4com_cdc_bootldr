@@ -315,9 +315,6 @@ public:
 		if (!isRegionFLASH(addr)) {
 			return;
 		}
-		if (!isRegionFLASH(addr + (length * 4) - 1)) {
-			return;
-		}
 
 		__writeFlashHalfPage(addr, &buffer[0]);
 		__writeFlashHalfPage(addr + (TBlockSizeNVM / 2), &buffer[0 + ((TBlockSizeNVM / 2) / sizeof(uint32_t))]);
@@ -328,9 +325,6 @@ public:
 			return;
 		}
 		if (!isRegionFLASH(addr)) {
-			return;
-		}
-		if (!isRegionFLASH(addr + TBlockSizeNVM)) {
 			return;
 		}
 

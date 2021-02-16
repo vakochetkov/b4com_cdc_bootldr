@@ -46,15 +46,15 @@ typedef union {
 	uint8_t data[1 + 4 + 1 + 4 + 1 + 4 + 1 + 4 + 1 + 4];
 } btldr_params_t;
 
-typedef union {
+typedef union { // WARN! data_block location MUST be 32bit aligned!
 	struct {
-		char b;
+		uint32_t bid;
 		uint32_t block_number;
-		char d;
-		uint8_t data_block[CHUNK_SIZE];
+		uint32_t did;
+		uint32_t data_block[CHUNK_SIZE / sizeof(uint32_t)];
 	} __attribute__((__packed__)) fields;
 
-	uint8_t data[1 + 4 + 1 + CHUNK_SIZE];
+	uint8_t data[4 + 4 + 4 + CHUNK_SIZE];
 } btldr_chunk_t;
 
 
@@ -70,6 +70,11 @@ class bootloader_c {
 		ST_FINISH
 	};
 	enum class parser_state_t : uint8_t {
+		ST_IDLE = 0,
+		ST_HOOKED,
+		ST_COMPLETE
+	};
+	enum class flasher_state_t : uint8_t {
 		ST_IDLE = 0,
 		ST_HOOKED,
 		ST_COMPLETE
@@ -106,6 +111,7 @@ class bootloader_c {
 	static btldr_chunk_t  fwblock;
 
 	static inline void disconnectAndReset() noexcept {
+		led::SetAll(0);
 		delay_ms(100);
 //		cdc::DeInit(); // xXX: debug
 		rcc::Reset();
@@ -176,6 +182,38 @@ class bootloader_c {
 		}
 	}
 
+	static void validateChunk() noexcept {
+		auto result = btldr_respond_t::RSPD_ACK;
+
+		if (fwblock.fields.bid != 0xBBBB) {
+			SHTRACE("B invalid: %c", fwblock.fields.bid);
+			result = btldr_respond_t::RSPD_BAD_FW_CHUNK;
+		}
+		if (fwblock.fields.block_number >= params.fields.num) {
+			SHTRACE("BNUM invalid: %c", fwblock.fields.block_number);
+			result = btldr_respond_t::RSPD_BAD_FW_CHUNKNUM;
+		}
+		if (fwblock.fields.did != 0xDDDD) {
+			SHTRACE("D invalid: %c", fwblock.fields.did);
+			result = btldr_respond_t::RSPD_BAD_FW_CHUNK;
+		}
+
+		if (result != btldr_respond_t::RSPD_ACK) {
+			cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(result)],
+							strlen(btldr_respond_msg[static_cast<uint8_t>(result)]));
+			disconnectAndReset();
+		}
+	}
+
+	static void flashChunk() noexcept { // FIXME: последний блок не пишется
+//		static uint32_t tmpbuf[32] = {0}; // FIXME: костыль
+//		memcpy(&tmpbuf[0], &fwblock.fields.data_block[0], 128);
+//		uint32_t * ptr = (uint32_t *);
+
+		flash::EraseChunk(fwblock.fields.block_number);
+		flash::WriteChunk(fwblock.fields.block_number, &fwblock.fields.data_block[0], TBlockSize);
+	}
+
 	static bool parseParams(char * buf, uint32_t length) noexcept {
 		static parser_state_t state = parser_state_t::ST_IDLE;
 		static uint32_t remain = 0;
@@ -218,7 +256,63 @@ class bootloader_c {
 			result = true;
 			break;
 
-		default: SHTRACE("parser error!"); disconnectAndReset();
+		default: SHTRACE("params parser error!"); disconnectAndReset();
+		}
+		return result;
+	}
+
+	static bool parseChunk(char * buf, uint32_t length) noexcept {
+		static flasher_state_t state = flasher_state_t::ST_IDLE;
+		static uint32_t remain = 0;
+		bool result = false;
+		char * chptr = NULL;
+
+		switch(state) {
+		case flasher_state_t::ST_IDLE:
+			chptr = strstr(buf, PREFIX);
+			if (chptr != NULL) {
+				remain = length - (chptr - buf) - strlen(PREFIX);
+
+				if (remain < sizeof(fwblock)) {
+					SHTRACE("fwblock fragmented!");
+					memcpy(&fwblock.data[0], (chptr + strlen(PREFIX)), remain);
+					remain = sizeof(fwblock) - remain;
+					state = flasher_state_t::ST_HOOKED;
+				} else {
+					SHTRACE("fwblock fully received");
+					memcpy(&fwblock.data[0], (chptr + strlen(PREFIX)), sizeof(fwblock));
+					state = flasher_state_t::ST_COMPLETE;
+				}
+
+			}
+			break;
+
+		case flasher_state_t::ST_HOOKED:
+			if (remain <= length) {
+				memcpy(&fwblock.data[sizeof(fwblock) - remain], &buf[0], remain);
+				state = flasher_state_t::ST_COMPLETE;
+			} else {
+				memcpy(&fwblock.data[sizeof(fwblock) - remain], &buf[0], length);
+				remain = remain - length;
+			}
+			break;
+
+		case flasher_state_t::ST_COMPLETE:
+			validateChunk();
+			flashChunk();
+			cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
+							strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
+
+			if (fwblock.fields.block_number == (params.fields.num - 1)) {
+				SHTRACE("FLASHED last chunk");
+				result = true;
+			} else {
+				state = flasher_state_t::ST_IDLE;
+				remain = 0;
+			}
+			break;
+
+		default: SHTRACE("chunk parser error!"); disconnectAndReset();
 		}
 		return result;
 	}
@@ -308,7 +402,7 @@ public:
 				SHTRACE("PARAMS parsed");
 				state = btldr_state_t::ST_FLASH;
 				t.Clear();
-				t.Set(2000);
+				t.Set(20000);
 			} else {
 				t.Update();
 			}
@@ -316,7 +410,27 @@ public:
 			break;
 
 		case btldr_state_t::ST_FLASH:
-			SHTRACE("ST_FLASH");
+			led::Set(4,1);
+
+			if (t.IsTimeOut()) {
+				SHTRACE("FLASH timeout");
+				disconnectAndReset();
+			}
+
+			if (parseChunk(buf, length)) {
+				SHTRACE("FLASH finished");
+				state = btldr_state_t::ST_CHECK;
+				t.Clear();
+				t.Set(10000);
+			} else {
+				t.Update();
+			}
+
+			break;
+
+		case btldr_state_t::ST_CHECK:
+			led::Set(4,1);
+			SHTRACE("ST_CHECK");
 			__BKPT(2);
 			break;
 

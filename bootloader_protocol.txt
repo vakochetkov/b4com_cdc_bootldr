@@ -18,6 +18,7 @@ Overall, the bootloader control flow is:
    Otherwise, try to execute firmware programming sequence
    
 =============================================================================
+NB: all device responses are prefixed with 'BTLDR_', i.e. 'BTLDR_ACK\n'
 
 Firmware programming sequence:
 1. Start USB CDC 
@@ -52,7 +53,7 @@ Firmware programming sequence:
    
 5. Receive and flash N chunks of firmware bytes, timeout is 2000ms
    Message format:
-   "BTLDR_" + 'B' + @chunk_number + 'D' + @chunk_data
+   "BTLDR_" + 0xBBBB + @chunk_number + 0xDDDD + @chunk_data + '\n'
    @chunk_number  - current chunk number starting from 0, 4 bytes long
    @chunk_data    - chunk of firmware bytes, @chunk bytes long
    * If chunk is successfully received and flashed, send "ACK\n"

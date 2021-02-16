@@ -7,7 +7,7 @@ from crccheck.crc import Crc32Mpeg2
 from hexformat.intelhex import IntelHex
 
 # flasher follows the bootloader protocol
-EXEC_PATH = '../Debug/b4com_cdc_bootldr.bin'
+EXEC_PATH = 'genhex.bin' # self flash: ../Debug/b4com_cdc_bootldr.bin'
 EXEC_FORMAT = 'bin'
 EXEC_OFFSET = '0x08008000'
 PORT = 'COM14'
@@ -172,5 +172,35 @@ else:
     print('FWPARAM stage - error')
     print(response)
     # sys.exit(1)
+
+
+# stage 4
+print('> FLASH stage')
+for i in range(0, int.from_bytes(num, byteorder='little')):
+    nextblock = bytearray(data[i*128:(i*128)+128]) # .to_bytes(128, byteorder='little')
+    
+    fwblock = b'BTLDR_' + int('0xBBBB', 0).to_bytes(4, byteorder='little') + \
+                int(i).to_bytes(4, byteorder='little') + int('0xDDDD', 0).to_bytes(4, byteorder='little') + nextblock + b'\n'
+    print('write block {0} / {1}'.format(i + 1, int.from_bytes(num, byteorder='little')))
+    print(fwblock)
+
+    serial.write(fwblock)
+    timeout.set(5000)
+    while not timeout.isAlarm and serial.inWaiting() < 4:
+        timeout.wait()
+    if timeout.isAlarm:
+        print('FLASH stage - no response')
+        # sys.exit(1)
+
+    response = serial.read(serial.inWaiting())
+    if b'BTLDR_ACK\n' in response:
+        print('FLASH stage - ACK')
+    else:
+        print('FLASH stage - error')
+        print(response)
+        # sys.exit(1)
+
+print('FLASH stage - finished!')
+
 
 print('*** FLASHER FINISHED ***')
