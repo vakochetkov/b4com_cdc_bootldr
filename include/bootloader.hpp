@@ -112,9 +112,16 @@ class bootloader_c {
 
 	static inline void disconnectAndReset() noexcept {
 		led::SetAll(0);
-		delay_ms(100);
-//		cdc::DeInit(); // xXX: debug
+		cdc::DeInit();
+		delay_ms(250);
 		rcc::Reset();
+	}
+
+	static inline void disconnectAndJump() noexcept {
+		led::SetAll(0);
+		cdc::DeInit();
+		delay_ms(250);
+		JumpToApp(FIRMWARE_ADDR_START);
 	}
 
 	static void __printParams() noexcept {
@@ -315,28 +322,28 @@ class bootloader_c {
 	}
 
 	static void calculateCRC() noexcept {
-
+		uint32_t crc = 0x0;
 		for(uint32_t i = 0; i < (params.fields.num); i++) {
 			flash::ReadChunk(i, &fwblock.fields.data_block[0], TBlockSize);
 			crc32::CalcBuffer(&fwblock.fields.data_block[0], TBlockSize / sizeof(uint32_t));
 		}
 
+		crc = crc32::GetResult();
+		if (params.fields.crc == crc) {
 
-		SHTRACE("CRC: %#010x", crc32::GetResult());
+			SHTRACE("CRC ok: %#010x", crc);
 
-		crc32::DeInit();
-		crc32::Init();
-		flash::ReadChunk(0, &fwblock.fields.data_block[0], TBlockSize);
-		crc32::CalcBuffer(&fwblock.fields.data_block[0], 1);
-		SHTRACE("CRC: %#010x", crc32::GetResult());
-		SHTRACE("DT: %#010x %#010x %#010x", fwblock.fields.data_block[0], fwblock.fields.data_block[1], fwblock.fields.data_block[2]);
+			flash::WriteWordEEPROM(static_cast<uint32_t>(btldr_magic_word_t::MW_FLASH_IS_UPDATED));
+			cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)],
+							strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_ACK)]));
 
-		led::SetAll(0);
-		delay_ms(2000);
-		JumpToApp(FIRMWARE_ADDR_START);
-//		__BKPT(2);
-//		uint32_t crc = crc32::CalcBufferBlocking(data, 3);
-
+			disconnectAndJump();
+		} else {
+			SHTRACE("CRC ERROR!");
+			cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_FLASH_CRC)],
+							strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_FLASH_CRC)]));
+			disconnectAndReset();
+		}
 	}
 
 public:

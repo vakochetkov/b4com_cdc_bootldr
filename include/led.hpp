@@ -133,22 +133,22 @@ public:
 
 	static void SetPython() noexcept {
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 4, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 4, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 6, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 6, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 2, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 2, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 5, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 5, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 7, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTA, 7, 0);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTB, 0, 1);
-			delay_ms(100);
+			delay_ms(50);
 			gpio::WritePin(gpio::GPIO_PORT_t::PORTB, 0, 0);
 		}
 

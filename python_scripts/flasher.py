@@ -7,6 +7,7 @@ from crccheck.crc import Crc32Mpeg2
 from hexformat.intelhex import IntelHex
 
 # flasher follows the bootloader protocol
+
 EXEC_PATH = 'genhex.bin' # self flash: ../Debug/b4com_cdc_bootldr.bin'
 EXEC_FORMAT = 'bin'
 EXEC_OFFSET = '0x08008000'
@@ -90,7 +91,7 @@ ihexdict = inhex.todict()
 timeout = Timeout()
 serial = serial.Serial(
                         port=PORT,
-                        baudrate=1000000,
+                        baudrate=2000000,
                         parity=serial.PARITY_NONE,
                         stopbits=serial.STOPBITS_ONE,
                         bytesize=serial.EIGHTBITS,
@@ -100,6 +101,8 @@ serial = serial.Serial(
 
 # stage 1
 print('> START stage')
+
+stime = time.time()
 serial.write(b'BTLDR_START\n')
 
 timeout.set(2000)
@@ -107,7 +110,7 @@ while not timeout.isAlarm and serial.inWaiting() < 5:
     timeout.wait()
 if timeout.isAlarm:
     print('START stage - no response')
-    # sys.exit(1)
+    sys.exit(1)
 
 
 response = serial.read(serial.inWaiting())
@@ -116,7 +119,7 @@ if b'BTLDR_ACK\n' in response:
 else:
     print('START stage - error')
     print(response)
-    # sys.exit(1)
+    sys.exit(1)
 
 # stage 2
 print('> DEVNAME stage')
@@ -127,7 +130,7 @@ while not timeout.isAlarm and serial.inWaiting() < 5:
     timeout.wait()
 if timeout.isAlarm:
     print('DEVNAME stage - no response')
-    # sys.exit(1)
+    sys.exit(1)
 
 response = serial.read(serial.inWaiting())
 if b'BTLDR_ACK\n' in response:
@@ -135,7 +138,7 @@ if b'BTLDR_ACK\n' in response:
 else:
     print('DEVNAME stage - error')
     print(response)
-    # sys.exit(1)
+    sys.exit(1)
 
 # stage 3
 print('> FWPARAM stage')
@@ -155,10 +158,16 @@ else:
     newdata = data
 
 crcinst = Crc32Mpeg2()
-crcinst.process(newdata)
+
+i = 0
+while (i < (len(newdata) - 3)):
+    crcinst.process((wordFromBytes(newdata[i],newdata[i+1],newdata[i+2],newdata[i+3]).to_bytes(4, byteorder='little')))
+    i = i + 4
+    # if (i) % 128 == 0: # debug output
+        # print(i / 4, crcinst.finalhex())
 crc = crcinst.final().to_bytes(4, byteorder='little')
 
-# add some garbage to check fragmented logic
+# add some garbage to check fragmented logic 
 param = b'abcd_ 1_2________________________________________________ BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
 print('size: {:d} addr: 0x{:08X} crc: 0x{:08X} chunk: {:d} num: {:d}'.format( 
         int.from_bytes(size, byteorder='little'),int.from_bytes(addr, byteorder='little'),int.from_bytes(crc, byteorder='little'),  
@@ -172,7 +181,7 @@ while not timeout.isAlarm and serial.inWaiting() < 5:
     timeout.wait()
 if timeout.isAlarm:
     print('FWPARAM stage - no response')
-    # sys.exit(1)
+    sys.exit(1)
 
 response = serial.read(serial.inWaiting())
 if b'BTLDR_ACK\n' in response:
@@ -180,13 +189,13 @@ if b'BTLDR_ACK\n' in response:
 else:
     print('FWPARAM stage - error')
     print(response)
-    # sys.exit(1)
+    sys.exit(1)
 
 
 # stage 4
 print('> FLASH stage')
 for i in range(0, int.from_bytes(num, byteorder='little')):
-    nextblock = bytearray(data[i*128:(i*128)+128]) # .to_bytes(128, byteorder='little')
+    nextblock = bytearray(newdata[i*128:(i*128)+128]) # .to_bytes(128, byteorder='little')
 
     fwblock = b'BTLDR_' + int('0xBBBB', 0).to_bytes(4, byteorder='little') + \
                 int(i).to_bytes(4, byteorder='little') + int('0xDDDD', 0).to_bytes(4, byteorder='little') + nextblock + b'\n'
@@ -199,7 +208,7 @@ for i in range(0, int.from_bytes(num, byteorder='little')):
         timeout.wait()
     if timeout.isAlarm:
         print('FLASH stage - no response')
-        # sys.exit(1)
+        sys.exit(1)
 
     response = serial.read(serial.inWaiting())
     if b'BTLDR_ACK\n' in response:
@@ -207,24 +216,21 @@ for i in range(0, int.from_bytes(num, byteorder='little')):
     else:
         print('FLASH stage - error')
         print(response)
-        # sys.exit(1)
+        sys.exit(1)
 
 print('FLASH stage - finished!')
 
-# stage 5 FIXME: make stopwatch
+# stage 5 
 print('> CRC stage: 0x{:08X}'.format(crcinst.final())) 
 serial.write(b'BTLDR_CHECK\n')
 
-# crc2 = Crc32Mpeg2()
-# crc2.process([ newdata[:8])
-# print('crc: 0x{:08X}'.format(crc2.final())) 
 
 timeout.set(5000)
 while not timeout.isAlarm and serial.inWaiting() < 5:
     timeout.wait()
 if timeout.isAlarm:
     print('CRC stage - no response')
-    # sys.exit(1)
+    sys.exit(1)
 
 
 response = serial.read(serial.inWaiting())
@@ -233,6 +239,9 @@ if b'BTLDR_ACK\n' in response:
 else:
     print('CRC stage - error')
     print(response)
-    # sys.exit(1)
+    sys.exit(1)
+
+etime = time.time()
+print('Elapsed time: {0} sec'.format(etime - stime))
 
 print('*** FLASHER FINISHED ***')

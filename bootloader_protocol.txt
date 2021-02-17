@@ -47,7 +47,7 @@ Firmware programming sequence:
    * If addr  is invalid, send "BAD_ADDR\n"
    * If crc   is invalid, send "BAD_CRC\n"
    * If chunk size is invalid, send "BAD_CHUNK\n"
-   * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n" NB: not used, reserved
+   * If size if not multiple of chunk, send "BAD_CHSZ_RATIO\n" --->NB: not used, reserved
    * If num is not matched with one calculated by device, send "BAD_CHNUM\n"
    * If not "ACK\n" or timeout, do reset
    
@@ -64,7 +64,7 @@ Firmware programming sequence:
 6. Wait for "BTLDR_CHECK", timeout is 2000ms
    * If firmware is successfully flashed, send "ACK\n", set "magic" word FLASH_IS_UPDATED and execute user FW
    * If received message is invalid, send "BAD_FLASH_CMD\n"
-   * If firmware read is failed, send "BAD_FLASH_READ\n"
+   * If firmware read is failed, send "BAD_FLASH_READ\n"  --->NB: not used, reserved
    * If calculated CRC mismatch, send "BAD_FLASH_CRC\n"
    * If not "ACK\n" or timeout, do reset
 
