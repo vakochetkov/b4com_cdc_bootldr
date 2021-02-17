@@ -50,6 +50,37 @@ public:
 
 		return (CRC->DR);
 	}
+
+	static void CalcBuffer(uint32_t * buf, uint32_t length) noexcept {
+		if ((length == 0) || (buf == nullptr)) {
+			return;
+		}
+
+		for (uint32_t i = 0; i < length; i++) {
+			CRC->DR = buf[i];
+		}
+
+	}
+
+	static uint32_t GetResult() noexcept {
+		return (CRC->DR);
+	}
+
+//	static uint32_t CalcBufferBlockingWithPrev(uint32_t prevCRC, uint32_t * buf, uint32_t length) noexcept {
+//		if ((length == 0) || (buf == nullptr)) {
+//			return 0;
+//		}
+//		if (length == 1) {
+//			return CalcWordBlocking(buf[0]);
+//		}
+//
+////		CRC->DR = prevCRC;
+//		for (uint32_t i = 0; i < length; i++) {
+//			CRC->DR = buf[i];
+//		}
+//
+//		return (CRC->DR);
+//	}
 };
 
 typedef crc32_c<0xFFFFFFFF, 0x04C11DB7> crc32;

@@ -3,7 +3,7 @@ from crccheck.checksum import Checksum32
 
 # both methods are valid and give right answer
 # data = [ bytearray.fromhex("000000AA"), bytearray.fromhex("00000000"), bytearray.fromhex("0000ABCD") ]
-data = bytearray.fromhex("000000AA000000000000ABCD")
+data = bytearray.fromhex("04030201")
 # crc = bytearray.fromhex("FFFFFFFF")
 
 crcinst = Crc32Mpeg2()

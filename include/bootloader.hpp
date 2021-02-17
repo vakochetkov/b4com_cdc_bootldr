@@ -205,10 +205,7 @@ class bootloader_c {
 		}
 	}
 
-	static void flashChunk() noexcept { // FIXME: последний блок не пишется
-//		static uint32_t tmpbuf[32] = {0}; // FIXME: костыль
-//		memcpy(&tmpbuf[0], &fwblock.fields.data_block[0], 128);
-//		uint32_t * ptr = (uint32_t *);
+	static void flashChunk() noexcept {
 
 		flash::EraseChunk(fwblock.fields.block_number);
 		flash::WriteChunk(fwblock.fields.block_number, &fwblock.fields.data_block[0], TBlockSize);
@@ -315,6 +312,31 @@ class bootloader_c {
 		default: SHTRACE("chunk parser error!"); disconnectAndReset();
 		}
 		return result;
+	}
+
+	static void calculateCRC() noexcept {
+
+		for(uint32_t i = 0; i < (params.fields.num); i++) {
+			flash::ReadChunk(i, &fwblock.fields.data_block[0], TBlockSize);
+			crc32::CalcBuffer(&fwblock.fields.data_block[0], TBlockSize / sizeof(uint32_t));
+		}
+
+
+		SHTRACE("CRC: %#010x", crc32::GetResult());
+
+		crc32::DeInit();
+		crc32::Init();
+		flash::ReadChunk(0, &fwblock.fields.data_block[0], TBlockSize);
+		crc32::CalcBuffer(&fwblock.fields.data_block[0], 1);
+		SHTRACE("CRC: %#010x", crc32::GetResult());
+		SHTRACE("DT: %#010x %#010x %#010x", fwblock.fields.data_block[0], fwblock.fields.data_block[1], fwblock.fields.data_block[2]);
+
+		led::SetAll(0);
+		delay_ms(2000);
+		JumpToApp(FIRMWARE_ADDR_START);
+//		__BKPT(2);
+//		uint32_t crc = crc32::CalcBufferBlocking(data, 3);
+
 	}
 
 public:
@@ -429,9 +451,28 @@ public:
 			break;
 
 		case btldr_state_t::ST_CHECK:
-			led::Set(4,1);
-			SHTRACE("ST_CHECK");
-			__BKPT(2);
+			led::Set(5,1);
+
+			if (t.IsTimeOut()) {
+				SHTRACE("CHECK timeout");
+				disconnectAndReset();
+			}
+
+			if (chptr != NULL) {
+				chptr = strstr(buf, btldr_cmd_msg[static_cast<uint8_t>(btldr_msg_t::MSG_CHECK)]);
+				if (chptr != NULL) {
+					SHTRACE("CHECK detected");
+					calculateCRC();
+				} else {
+					SHTRACE("invalid CHECK cmd detected");
+					cdc::WriteBlk(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_FLASH_CMD)],
+									strlen(btldr_respond_msg[static_cast<uint8_t>(btldr_respond_t::RSPD_BAD_FLASH_CMD)]));
+					disconnectAndReset();
+				}
+			} else {
+				t.Update();
+			}
+
 			break;
 
 		default: disconnectAndReset();

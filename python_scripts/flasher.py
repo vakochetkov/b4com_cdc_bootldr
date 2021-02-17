@@ -90,7 +90,7 @@ ihexdict = inhex.todict()
 timeout = Timeout()
 serial = serial.Serial(
                         port=PORT,
-                        baudrate=500000,
+                        baudrate=1000000,
                         parity=serial.PARITY_NONE,
                         stopbits=serial.STOPBITS_ONE,
                         bytesize=serial.EIGHTBITS,
@@ -143,11 +143,20 @@ size = inhex.usedsize().to_bytes(4, byteorder='little')
 addr = int(EXEC_OFFSET, 0).to_bytes(4, byteorder='little')
 data = list(inhex.todict().values())
 
-crcinst = Crc32Mpeg2()
-crcinst.process(data)
-crc = crcinst.final().to_bytes(4, byteorder='little')
 chunk = int(128).to_bytes(4, byteorder='little')
 num = (int(inhex.usedsize() / 128) + (inhex.usedsize() % 128 > 0)).to_bytes(4, byteorder='little')
+
+if (int.from_bytes(num, byteorder='little') * 128) - inhex.usedsize() > 0:
+    print('FWPARAM stage - blocks unaligned')
+    newdata = data + [0] * ((int.from_bytes(num, byteorder='little') * 128) - inhex.usedsize())
+    print(len(newdata))
+else:
+    print('FWPARAM stage - blocks aligned')
+    newdata = data
+
+crcinst = Crc32Mpeg2()
+crcinst.process(newdata)
+crc = crcinst.final().to_bytes(4, byteorder='little')
 
 # add some garbage to check fragmented logic
 param = b'abcd_ 1_2________________________________________________ BTLDR_' + b'S' + size + b'A' + addr + b'C' + crc + b'B' + chunk + b'N' + num + b'\n'
@@ -178,11 +187,11 @@ else:
 print('> FLASH stage')
 for i in range(0, int.from_bytes(num, byteorder='little')):
     nextblock = bytearray(data[i*128:(i*128)+128]) # .to_bytes(128, byteorder='little')
-    
+
     fwblock = b'BTLDR_' + int('0xBBBB', 0).to_bytes(4, byteorder='little') + \
                 int(i).to_bytes(4, byteorder='little') + int('0xDDDD', 0).to_bytes(4, byteorder='little') + nextblock + b'\n'
     print('write block {0} / {1}'.format(i + 1, int.from_bytes(num, byteorder='little')))
-    print(fwblock)
+    # print(fwblock)
 
     serial.write(fwblock)
     timeout.set(5000)
@@ -202,5 +211,28 @@ for i in range(0, int.from_bytes(num, byteorder='little')):
 
 print('FLASH stage - finished!')
 
+# stage 5 FIXME: make stopwatch
+print('> CRC stage: 0x{:08X}'.format(crcinst.final())) 
+serial.write(b'BTLDR_CHECK\n')
+
+# crc2 = Crc32Mpeg2()
+# crc2.process([ newdata[:8])
+# print('crc: 0x{:08X}'.format(crc2.final())) 
+
+timeout.set(5000)
+while not timeout.isAlarm and serial.inWaiting() < 5:
+    timeout.wait()
+if timeout.isAlarm:
+    print('CRC stage - no response')
+    # sys.exit(1)
+
+
+response = serial.read(serial.inWaiting())
+if b'BTLDR_ACK\n' in response:
+    print('CRC stage - ACK')
+else:
+    print('CRC stage - error')
+    print(response)
+    # sys.exit(1)
 
 print('*** FLASHER FINISHED ***')

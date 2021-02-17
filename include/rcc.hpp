@@ -46,6 +46,8 @@ public:
 	    _WVL(RCC->CFGR, RCC_CFGR_SWS, RCC_CFGR_SWS_PLL);
 
 	    _BST(RCC->APB2ENR, RCC_APB2ENR_SYSCFGEN);
+
+	    __enable_irq();
 	}
 
 	static void InitSysTick() noexcept {

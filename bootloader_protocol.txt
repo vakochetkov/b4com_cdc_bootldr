@@ -76,7 +76,5 @@ Bootloader execute the following sequence to jump to user firmware:
 3. Set MSP and VTOR
 4. Jump to user firmware start address, usually triggering startup sequence in user firmware
 
-NB: this trick can be done by programming FLASH_IS_UPDATED to EEPROM and soft-reset MCU
-
 
 
