@@ -22,7 +22,7 @@ extern "C" {
 #include <stdio.h>
 
 
-#define USE_SEMIHOSTING_VIA_DBG // un/define to use retarget
+//#define USE_SEMIHOSTING_VIA_DBG // un/define to use retarget
 
 #ifdef USE_SEMIHOSTING_VIA_DBG
 #define SHTRACE(fmt,args...) trace_bkpt("%s(%s)-" fmt "\n", __FILE__, __FUNCTION__, ##args)
