@@ -459,6 +459,7 @@ public:
 
 		case btldr_state_t::ST_CHECK:
 			led::Set(5,1);
+			chptr = strstr(buf, PREFIX);
 
 			if (t.IsTimeOut()) {
 				SHTRACE("CHECK timeout");
